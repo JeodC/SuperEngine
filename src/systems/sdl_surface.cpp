@@ -24,7 +24,7 @@
 
 #include "systems/sdl_surface.hpp"
 
-#include <SDL/SDL.h>
+#include <SDL.h>
 
 #include "core/colour.hpp"
 #include "core/localrect.hpp"
@@ -36,7 +36,7 @@
 #include "systems/gltexture.hpp"
 #include "systems/screen_canvas.hpp"
 
-#include "GL/glew.h"
+#include "systems/gl_loader.hpp"
 #include "utilities/graphics.hpp"
 
 #include <algorithm>
@@ -80,7 +80,7 @@ static inline SDL_Rect ToSDLRect(const Rect rect) {
 SDL_Surface* buildNewSurface(const Size& size) {
   // Create an empty surface
   SDL_Surface* tmp = SDL_CreateRGBSurface(
-      SDL_SWSURFACE | SDL_SRCALPHA, size.width(), size.height(), DefaultBpp,
+      0, size.width(), size.height(), DefaultBpp,
       DefaultRmask, DefaultGmask, DefaultBmask, DefaultAmask);
 
   if (tmp == NULL) {
@@ -90,6 +90,7 @@ SDL_Surface* buildNewSurface(const Size& size) {
     throw std::runtime_error(ss.str());
   }
 
+  SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
   return tmp;
 }
 
@@ -232,11 +233,14 @@ void SDLSurface::BlitToSurface(Surface& dest_surface,
     pygame_stretch(src_image, tmp);
 
     if (use_src_alpha) {
-      if (SDL_SetAlpha(tmp, SDL_SRCALPHA, alpha))
-        ThrowSDLError("SDL_SetAlpha", "GraphicsSystem::blitSurfaceToDC()");
+      if (SDL_SetSurfaceAlphaMod(tmp, alpha) ||
+          SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND))
+        ThrowSDLError("SDL_SetSurfaceAlphaMod",
+                      "GraphicsSystem::blitSurfaceToDC()");
     } else {
-      if (SDL_SetAlpha(tmp, 0, 0))
-        ThrowSDLError("SDL_SetAlpha", "GraphicsSystem::blitSurfaceToDC()");
+      if (SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_NONE))
+        ThrowSDLError("SDL_SetSurfaceBlendMode",
+                      "GraphicsSystem::blitSurfaceToDC()");
     }
 
     if (SDL_BlitSurface(tmp, NULL, sdl_dest_surface.RawSurface(), &dest_rect))
@@ -246,11 +250,14 @@ void SDLSurface::BlitToSurface(Surface& dest_surface,
     SDL_FreeSurface(src_image);
   } else {
     if (use_src_alpha) {
-      if (SDL_SetAlpha(surface_, SDL_SRCALPHA, alpha))
-        ThrowSDLError("SDL_SetAlpha", "GraphicsSystem::blitSurfaceToDC()");
+      if (SDL_SetSurfaceAlphaMod(surface_, alpha) ||
+          SDL_SetSurfaceBlendMode(surface_, SDL_BLENDMODE_BLEND))
+        ThrowSDLError("SDL_SetSurfaceAlphaMod",
+                      "GraphicsSystem::blitSurfaceToDC()");
     } else {
-      if (SDL_SetAlpha(surface_, 0, 0))
-        ThrowSDLError("SDL_SetAlpha", "GraphicsSystem::blitSurfaceToDC()");
+      if (SDL_SetSurfaceBlendMode(surface_, SDL_BLENDMODE_NONE))
+        ThrowSDLError("SDL_SetSurfaceBlendMode",
+                      "GraphicsSystem::blitSurfaceToDC()");
     }
 
     if (SDL_BlitSurface(surface_, &src_rect, sdl_dest_surface.RawSurface(),
@@ -529,14 +536,14 @@ const GrpRect& SDLSurface::GetPattern(int patt_no) const {
 
 std::shared_ptr<Surface> SDLSurface::Clone() const {
   SDL_Surface* tmp_surface = SDL_CreateRGBSurface(
-      surface_->flags, surface_->w, surface_->h, surface_->format->BitsPerPixel,
+      0, surface_->w, surface_->h, surface_->format->BitsPerPixel,
       surface_->format->Rmask, surface_->format->Gmask, surface_->format->Bmask,
       surface_->format->Amask);
 
   // Disable alpha blending because we're copying onto a blank (and
   // blank alpha!) surface
-  if (SDL_SetAlpha(surface_, 0, 0))
-    ThrowSDLError("SDL_SetAlpha", "GraphicsSystem::blitSurfaceToDC()");
+  if (SDL_SetSurfaceBlendMode(surface_, SDL_BLENDMODE_NONE))
+    ThrowSDLError("SDL_SetSurfaceBlendMode", "SDLSurface::Clone()");
 
   if (SDL_BlitSurface(surface_, NULL, tmp_surface, NULL))
     ThrowSDLError("SDL_BlitSurface", "SDLSurface::clone()");
@@ -586,10 +593,9 @@ RGBAColour SDLSurface::GetPixelAt(Point pos) const {
   // Copy pixel data
   std::memcpy(&col, p_position, surface_->format->BytesPerPixel);
 
-  // Use SDL_GetRGBA to extract RGBA components
   SDL_GetRGBA(col, surface_->format, &colour.r, &colour.g, &colour.b,
-              &colour.unused);
-  return RGBAColour(colour.r, colour.g, colour.b, colour.unused);
+              &colour.a);
+  return RGBAColour(colour.r, colour.g, colour.b, colour.a);
 }
 
 std::vector<char> SDLSurface::Dump(Rect region) const {
@@ -639,8 +645,8 @@ std::shared_ptr<Surface> SDLSurface::ClipAsColorMask(const Rect& clip_rect,
     ThrowSDLError("SDL_BlitSurface", function_name);
 
   Uint32 colour = SDL_MapRGB(tmp_surface->format, r, g, b);
-  if (SDL_SetColorKey(tmp_surface, SDL_SRCCOLORKEY, colour))
-    ThrowSDLError("SDL_SetAlpha", function_name);
+  if (SDL_SetColorKey(tmp_surface, SDL_TRUE, colour))
+    ThrowSDLError("SDL_SetColorKey", function_name);
 
   // The OpenGL pieces don't know what to do an image formatted to
   // (FF0000, FF00, FF, 0), so convert it to a standard RGBA image

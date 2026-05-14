@@ -26,7 +26,7 @@
 #include "core/rect.hpp"
 
 #include <GL/glew.h>
-#include <SDL/SDL.h>
+#include <SDL.h>
 
 #include <stdexcept>
 

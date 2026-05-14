@@ -20,8 +20,9 @@
 
 #include "systems/gl_utils.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
+#include <cstring>
 #include <stdexcept>
 
 std::string GetGLErrors(void) {
@@ -62,11 +63,21 @@ void ShowGLErrors() {
 // -----------------------------------------------------------------------
 
 bool IsNPOTSafe() {
-#ifndef GLEW_ARB_texture_non_power_of_two
+  // Check GL_ARB_texture_non_power_of_two via runtime extension string
+  // instead of GLEW's compile-time macro. Cached after first call.
+  // NPOT is core in GL 2.0+ and GLES 3.0+, so this is true on essentially
+  // every target we support — but we still verify defensively.
+  static bool initialized = false;
   static bool is_safe = false;
-#else
-  static bool is_safe = GLEW_ARB_texture_non_power_of_two;
-#endif
+  if (!initialized) {
+    initialized = true;
+    const GLubyte* extensions_str = glGetString(GL_EXTENSIONS);
+    if (extensions_str) {
+      const char* extensions = reinterpret_cast<const char*>(extensions_str);
+      is_safe =
+          std::strstr(extensions, "GL_ARB_texture_non_power_of_two") != nullptr;
+    }
+  }
   return is_safe;
 }
 

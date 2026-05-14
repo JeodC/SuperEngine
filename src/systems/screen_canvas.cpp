@@ -26,7 +26,7 @@
 
 #include "systems/gltexture.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 std::shared_ptr<glTexture> ScreenCanvas::GetTexture() const {
   auto result = std::make_shared<glTexture>(display_size_);

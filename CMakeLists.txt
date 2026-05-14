@@ -31,17 +31,6 @@ endif()
 enable_testing()
 
 # -------------------------------------------------------------------
-# Find TBB Library
-# -------------------------------------------------------------------
-find_package(TBB REQUIRED)
-if(TBB_FOUND)
-  message(STATUS "TBB found: ${TBB_VERSION}")
-  include_directories(${TBB_INCLUDE_DIRS})
-else()
-  message(ERROR "TBB not found.")
-endif()
-
-# -------------------------------------------------------------------
 # Find OpenGL Library
 # -------------------------------------------------------------------
 find_package(OpenGL REQUIRED)
@@ -53,22 +42,24 @@ else()
 endif()
 
 # -------------------------------------------------------------------
-# Find GLEW Library
+# Find SDL2 + satellites
 # -------------------------------------------------------------------
-find_package(GLEW REQUIRED)
-if (GLEW_FOUND)
-  message(STATUS "GLEW found: ${GLEW_VERSION}")
-  include_directories(${GLEW_INCLUDE_DIRS})
-else()
-  message(FATAL_ERROR "GLEW not found. Please install GLEW.")
-endif()
-
-# -------------------------------------------------------------------
-# Find SDL1 Library
-# -------------------------------------------------------------------
-pkg_check_modules(SDL1 REQUIRED sdl "${_PKG_CONFIG_ARGS}")
-include_directories(${SDL1_INCLUDE_DIRS})
-link_directories(${SDL1_LIBRARY_DIRS})
+pkg_check_modules(SDL2 REQUIRED sdl2)
+pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+include_directories(
+  ${SDL2_INCLUDE_DIRS}
+  ${SDL2_IMAGE_INCLUDE_DIRS}
+  ${SDL2_MIXER_INCLUDE_DIRS}
+  ${SDL2_TTF_INCLUDE_DIRS}
+)
+link_directories(
+  ${SDL2_LIBRARY_DIRS}
+  ${SDL2_IMAGE_LIBRARY_DIRS}
+  ${SDL2_MIXER_LIBRARY_DIRS}
+  ${SDL2_TTF_LIBRARY_DIRS}
+)
 
 # -------------------------------------------------------------------
 # Find Boost Libraries

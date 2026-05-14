@@ -22,7 +22,7 @@
 //
 // -----------------------------------------------------------------------
 
-#include "GL/glew.h"
+#include "systems/gl_loader.hpp"
 
 #include "systems/sdl/graphics_backend.hpp"
 
@@ -37,10 +37,10 @@
 #include "systems/screen_canvas.hpp"
 #include "systems/sdl_surface.hpp"
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_video.h>
+#include <SDL.h>
+#include <SDL_video.h>
 #if !defined(__APPLE__) && !defined(_WIN32)
-#include <SDL/SDL_image.h>
+#include <SDL_image.h>
 #include "../resources/48/rlvm_icon_48.xpm"
 #endif
 
@@ -66,31 +66,66 @@ static std::string LoadFile(const std::filesystem::path& pth) {
 }
 
 SDLGraphicsBackend::SDLGraphicsBackend()
-    : screen_(nullptr),
+    : window_(nullptr),
+      gl_context_(nullptr),
       screen_contents_texture_(nullptr),
       screen_contents_texture_valid_(false) {}
 
 void SDLGraphicsBackend::InitSystem(Size screen_size, bool is_fullscreen) {
   SDLSurface::screen_ = std::make_shared<ScreenCanvas>(screen_size);
-  Resize(screen_size, is_fullscreen);
 
-  // Initialize glew
-  if (glewInit() != GLEW_OK)
-    throw std::runtime_error("Failed to initialize GLEW: " + GetGLErrors());
+  // SDL 2 requires GL attributes set BEFORE the window is created.
+  SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+  Uint32 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+  if (is_fullscreen)
+    window_flags |= SDL_WINDOW_FULLSCREEN;
+
+  window_ = SDL_CreateWindow("rlvm", SDL_WINDOWPOS_CENTERED,
+                             SDL_WINDOWPOS_CENTERED, screen_size.width(),
+                             screen_size.height(), window_flags);
+  if (!window_)
+    throw std::runtime_error("SDL_CreateWindow failed: "s + SDL_GetError());
+
+  gl_context_ = SDL_GL_CreateContext(window_);
+  if (!gl_context_)
+    throw std::runtime_error("SDL_GL_CreateContext failed: "s + SDL_GetError());
+
+  // Resolve GL 1.2+ entry points via SDL_GL_GetProcAddress. Replaces the
+  // old GLEW dependency, which on KMS/DRM handhelds (Mali GLES + gl4es,
+  // ROCKNIX, etc.) failed to init because its default path probes for a
+  // GLX context that doesn't exist there.
+  const char* missing = nullptr;
+  if (!InitGLFunctions(&missing)) {
+    throw std::runtime_error(
+        std::string("Failed to load GL function: ") + (missing ? missing : "?"));
+  }
 
   ShowGLErrors();
 
 #if !defined(__APPLE__) && !defined(_WIN32)
   SDL_Surface* icon = IMG_ReadXPMFromArray(rlvm_icon_48);
   if (icon) {
-    SDL_SetColorKey(icon, SDL_SRCCOLORKEY,
+    SDL_SetColorKey(icon, SDL_TRUE,
                     SDL_MapRGB(icon->format, 255, 255, 255));
-    SDL_WM_SetIcon(icon, NULL);
+    SDL_SetWindowIcon(window_, icon);
     SDL_FreeSurface(icon);
   }
 #endif
 }
-void SDLGraphicsBackend::QuitSystem() {}
+void SDLGraphicsBackend::QuitSystem() {
+  if (gl_context_) {
+    SDL_GL_DeleteContext(gl_context_);
+    gl_context_ = nullptr;
+  }
+  if (window_) {
+    SDL_DestroyWindow(window_);
+    window_ = nullptr;
+  }
+}
 
 void SDLGraphicsBackend::Resize(Size display_size, bool is_fullscreen) {
   if (auto fake_screen =
@@ -98,32 +133,10 @@ void SDLGraphicsBackend::Resize(Size display_size, bool is_fullscreen) {
     fake_screen->display_size_ = display_size;
   }
 
-  const SDL_VideoInfo* info = SDL_GetVideoInfo();
-  if (!info)
-    throw std::runtime_error("Video query failed: "s + SDL_GetError());
-
-  int bpp = info->vfmt->BitsPerPixel;
-
-  // the flags to pass to SDL_SetVideoMode
-  int video_flags;
-  video_flags = SDL_OPENGL;            // Enable OpenGL in SDL
-  video_flags |= SDL_GL_DOUBLEBUFFER;  // Enable double buffering
-  video_flags |= SDL_SWSURFACE;
-  video_flags |= SDL_RESIZABLE;
-
-  if (is_fullscreen)
-    video_flags |= SDL_FULLSCREEN;
-
-  // Sets up OpenGL double buffering
-  SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-  SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-  SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-
-  // Set the video mode
-  if ((screen_ = SDL_SetVideoMode(display_size.width(), display_size.height(),
-                                  bpp, video_flags)) == 0) {
-    throw std::runtime_error("Video mode set failed: "s + SDL_GetError());
+  if (window_) {
+    SDL_SetWindowSize(window_, display_size.width(), display_size.height());
+    SDL_SetWindowFullscreen(window_,
+                            is_fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
   }
 
   screen_contents_texture_.reset();
@@ -156,21 +169,12 @@ std::shared_ptr<Surface> SDLGraphicsBackend::CreateSurfaceBGRA(
       bgra.data(), size.width(), size.height(), DefaultBpp, size.width() * 4,
       DefaultRmask, DefaultGmask, DefaultBmask, amask);
 
-  // We now need to convert this surface to a format suitable for use across
-  // the rest of the program. We can't (regretfully) rely on
-  // SDL_DisplayFormat[Alpha] to decide on a format that we can send to OpenGL
-  // (see some Intel macs) so use convert surface to a pixel order our data
-  // correctly while still using the appropriate alpha flags. So use the above
-  // format with only the flags that would have been set by
-  // SDL_DisplayFormat[Alpha].
-  Uint32 flags;
-  if (is_alpha_mask) {
-    flags = tmp->flags & (SDL_SRCALPHA | SDL_RLEACCELOK);
-  } else {
-    flags = tmp->flags & (SDL_SRCCOLORKEY | SDL_SRCALPHA | SDL_RLEACCELOK);
-  }
-
-  SDL_Surface* surf = SDL_ConvertSurface(tmp, tmp->format, flags);
+  // SDL 2 dropped the SDL_SRCALPHA / SDL_SRCCOLORKEY / SDL_RLEACCELOK
+  // surface flags (alpha/blend/colorkey are now per-attribute setters, not
+  // bits OR'd into the surface). Under SDL 2 the convert is just a deep copy
+  // in the same pixel format; any blend mode the caller wants is applied to
+  // the returned surface separately.
+  SDL_Surface* surf = SDL_ConvertSurface(tmp, tmp->format, 0);
   SDL_FreeSurface(tmp);
 
   return std::make_shared<Surface>(surf);
@@ -243,7 +247,8 @@ void SDLGraphicsBackend::SetWindowTitle(const std::string& title_utf8) {
   if (title_utf8 == current_window_title_)
     return;
 
-  SDL_WM_SetCaption(title_utf8.c_str(), nullptr);
+  if (window_)
+    SDL_SetWindowTitle(window_, title_utf8.c_str());
   current_window_title_ = title_utf8;
 }
 
@@ -303,7 +308,7 @@ void SDLGraphicsBackend::RenderFrame(const RenderFrameConfig& config,
     draw_cursor();
 
   glFlush();
-  SDL_GL_SwapBuffers();
+  SDL_GL_SwapWindow(window_);
   ShowGLErrors();
 }
 
@@ -322,7 +327,7 @@ void SDLGraphicsBackend::RedrawLastFrame(const RenderFrameConfig& config,
   if (draw_cursor)
     draw_cursor();
 
-  SDL_GL_SwapBuffers();
+  SDL_GL_SwapWindow(window_);
   ShowGLErrors();
 }
 
@@ -344,11 +349,19 @@ std::shared_ptr<Surface> SDLGraphicsBackend::RenderToSurface(
   const int height = config.screen_size.height();
 
   std::vector<GLubyte> buf(width * height * 4);
-  glGetTextureSubImage(texture->GetID(), 0, 0, 0, 0, width, height, 1, GL_RGBA,
-                       GL_UNSIGNED_BYTE, buf.size(), buf.data());
+  GLint prev_fbo = 0;
+  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_fbo);
+  GLuint tmp_fbo = 0;
+  glGenFramebuffers(1, &tmp_fbo);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, tmp_fbo);
+  glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                         GL_TEXTURE_2D, texture->GetID(), 0);
+  glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
+  glDeleteFramebuffers(1, &tmp_fbo);
 
   SDL_Surface* surface =
-      SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 32, 0xFF000000,
+      SDL_CreateRGBSurface(0, width, height, 32, 0xFF000000,
                            0x00FF0000, 0x0000FF00, 0x000000FF);
   if (!surface)
     throw std::runtime_error("SDL_CreateRGBSurface failed");

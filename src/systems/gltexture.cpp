@@ -26,7 +26,7 @@
 #include "core/colour.hpp"
 #include "systems/gl_utils.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 glTexture::glTexture(Size size, uint8_t* data) { Init(size, data); }
 
@@ -73,9 +73,21 @@ std::vector<RGBAColour> glTexture::Dump(std::optional<Rect> in_region) {
 
   const Rect region = Flip_y(in_region.value_or(Rect(Point(0, 0), size_)));
   std::vector<uint8_t> data(region.width() * region.height() * 4);
-  glGetTextureSubImage(id_, 0, region.x(), region.y(), 0, region.width(),
-                       region.height(), 1, GL_RGBA, GL_UNSIGNED_BYTE,
-                       data.size(), data.data());
+
+  GLint prev_fbo = 0;
+  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_fbo);
+
+  GLuint tmp_fbo = 0;
+  glGenFramebuffers(1, &tmp_fbo);
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, tmp_fbo);
+  glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                         GL_TEXTURE_2D, id_, 0);
+  glReadPixels(region.x(), region.y(), region.width(), region.height(),
+               GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
+  glDeleteFramebuffers(1, &tmp_fbo);
+
   data = Flip_y(region.size(), data.data());
 
   std::vector<RGBAColour> result(data.size() / 4);

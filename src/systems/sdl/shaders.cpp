@@ -22,7 +22,7 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 // -----------------------------------------------------------------------
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 #include "systems/sdl/shaders.hpp"
 

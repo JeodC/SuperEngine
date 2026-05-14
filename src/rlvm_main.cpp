@@ -22,9 +22,9 @@
 //
 // -----------------------------------------------------------------------
 
-// We include this here because SDL is retarded and works by #define
-// main(int argc, char* agrv[]). Loosers.
-#include <SDL/SDL.h>
+// We include this here because SDL replaces main() with a #define for
+// platform-specific bootstrapping. Pulling SDL.h in here makes it work.
+#include <SDL.h>
 // TODO: Clean up platform-specific dependencies (SDL, GTK, etc.) once
 // abstractions and implementations are separated properly. Consider
 // refactoring for better cross-platform support and modularity.

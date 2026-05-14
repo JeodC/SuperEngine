@@ -30,7 +30,7 @@
 
 #include <cstring>
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 glCanvas::glCanvas(Size resolution,
                    std::optional<Size> display_size,

@@ -26,7 +26,7 @@
 
 #include "systems/sdl/shaders.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 std::shared_ptr<glslProgram> _GetColorMaskShader() {
   static constexpr std::string_view vertex_src = R"glsl(

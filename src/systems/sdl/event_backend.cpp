@@ -25,8 +25,8 @@
 
 #include "systems/sdl/event_backend.hpp"
 
-#include <SDL/SDL.h>
-#include <SDL/SDL_events.h>
+#include <SDL.h>
+#include <SDL_events.h>
 
 namespace {
 
@@ -38,17 +38,89 @@ inline MouseButton fromSDLButton(Uint8 sdlButton) {
       return MouseButton::RIGHT;
     case SDL_BUTTON_MIDDLE:
       return MouseButton::MIDDLE;
-    // case 4: return MouseButton::WHEELUP;
-    // case 5: return MouseButton::WHEELDOWN;
     default:
       return MouseButton::NONE;
   }
 }
 
-inline KeyCode fromSDLKey(SDLKey sdlKey) {
-  // Because the current KeyCode enum "lines up" with the old SDL1.2 key sym
-  // values, a simple static_cast is  sufficient:
-  return static_cast<KeyCode>(sdlKey);
+// The KeyCode enum was lifted verbatim from SDL 1.2's SDLKey numeric values.
+// SDL 2 renumbered all non-ASCII keys (arrows, modifiers, function keys, ...)
+// to live above 0x40000000, so we translate at the boundary instead of
+// renumbering the engine-facing enum (which would invalidate save data).
+inline KeyCode fromSDLKey(SDL_Keycode k) {
+  // ASCII range maps directly.
+  if (k >= 0 && k < 0x80)
+    return static_cast<KeyCode>(k);
+  switch (k) {
+    // Numeric keypad
+    case SDLK_KP_0:        return static_cast<KeyCode>(256);
+    case SDLK_KP_1:        return static_cast<KeyCode>(257);
+    case SDLK_KP_2:        return static_cast<KeyCode>(258);
+    case SDLK_KP_3:        return static_cast<KeyCode>(259);
+    case SDLK_KP_4:        return static_cast<KeyCode>(260);
+    case SDLK_KP_5:        return static_cast<KeyCode>(261);
+    case SDLK_KP_6:        return static_cast<KeyCode>(262);
+    case SDLK_KP_7:        return static_cast<KeyCode>(263);
+    case SDLK_KP_8:        return static_cast<KeyCode>(264);
+    case SDLK_KP_9:        return static_cast<KeyCode>(265);
+    case SDLK_KP_PERIOD:   return static_cast<KeyCode>(266);
+    case SDLK_KP_DIVIDE:   return static_cast<KeyCode>(267);
+    case SDLK_KP_MULTIPLY: return static_cast<KeyCode>(268);
+    case SDLK_KP_MINUS:    return static_cast<KeyCode>(269);
+    case SDLK_KP_PLUS:     return static_cast<KeyCode>(270);
+    case SDLK_KP_ENTER:    return static_cast<KeyCode>(271);
+    case SDLK_KP_EQUALS:   return static_cast<KeyCode>(272);
+    // Arrows + Home/End pad
+    case SDLK_UP:          return static_cast<KeyCode>(273);
+    case SDLK_DOWN:        return static_cast<KeyCode>(274);
+    case SDLK_RIGHT:       return static_cast<KeyCode>(275);
+    case SDLK_LEFT:        return static_cast<KeyCode>(276);
+    case SDLK_INSERT:      return static_cast<KeyCode>(277);
+    case SDLK_HOME:        return static_cast<KeyCode>(278);
+    case SDLK_END:         return static_cast<KeyCode>(279);
+    case SDLK_PAGEUP:      return static_cast<KeyCode>(280);
+    case SDLK_PAGEDOWN:    return static_cast<KeyCode>(281);
+    // Function keys
+    case SDLK_F1:          return static_cast<KeyCode>(282);
+    case SDLK_F2:          return static_cast<KeyCode>(283);
+    case SDLK_F3:          return static_cast<KeyCode>(284);
+    case SDLK_F4:          return static_cast<KeyCode>(285);
+    case SDLK_F5:          return static_cast<KeyCode>(286);
+    case SDLK_F6:          return static_cast<KeyCode>(287);
+    case SDLK_F7:          return static_cast<KeyCode>(288);
+    case SDLK_F8:          return static_cast<KeyCode>(289);
+    case SDLK_F9:          return static_cast<KeyCode>(290);
+    case SDLK_F10:         return static_cast<KeyCode>(291);
+    case SDLK_F11:         return static_cast<KeyCode>(292);
+    case SDLK_F12:         return static_cast<KeyCode>(293);
+    case SDLK_F13:         return static_cast<KeyCode>(294);
+    case SDLK_F14:         return static_cast<KeyCode>(295);
+    case SDLK_F15:         return static_cast<KeyCode>(296);
+    // Key state modifier keys. SDL 2 dropped meta in favor of GUI; map to the
+    // SDL 1.2 META slot so any engine-side bindings keep working.
+    case SDLK_NUMLOCKCLEAR: return static_cast<KeyCode>(300);
+    case SDLK_CAPSLOCK:     return static_cast<KeyCode>(301);
+    case SDLK_SCROLLLOCK:   return static_cast<KeyCode>(302);
+    case SDLK_RSHIFT:       return static_cast<KeyCode>(303);
+    case SDLK_LSHIFT:       return static_cast<KeyCode>(304);
+    case SDLK_RCTRL:        return static_cast<KeyCode>(305);
+    case SDLK_LCTRL:        return static_cast<KeyCode>(306);
+    case SDLK_RALT:         return static_cast<KeyCode>(307);
+    case SDLK_LALT:         return static_cast<KeyCode>(308);
+    case SDLK_RGUI:         return static_cast<KeyCode>(309);  // RMETA
+    case SDLK_LGUI:         return static_cast<KeyCode>(310);  // LMETA
+    case SDLK_MODE:         return static_cast<KeyCode>(313);
+    // Misc
+    case SDLK_HELP:         return static_cast<KeyCode>(315);
+    case SDLK_PRINTSCREEN:  return static_cast<KeyCode>(316);
+    case SDLK_SYSREQ:       return static_cast<KeyCode>(317);
+    case SDLK_PAUSE:        return KeyCode::PAUSE;  // SDL 1.2 PAUSE was 19
+    case SDLK_MENU:         return static_cast<KeyCode>(319);
+    case SDLK_POWER:        return static_cast<KeyCode>(320);
+    case SDLK_UNDO:         return static_cast<KeyCode>(322);
+    default:
+      return KeyCode::UNKNOWN;
+  }
 }
 
 Event translateSDLToEvent(const SDL_Event& sdlEvent) {
@@ -56,28 +128,26 @@ Event translateSDLToEvent(const SDL_Event& sdlEvent) {
     case SDL_QUIT:
       return Quit{};
 
-    // window re-exposed after being covered/minimized
-    case SDL_VIDEOEXPOSE:
-      return VideoExpose{};
-
-    case SDL_VIDEORESIZE:
-
-      return VideoResize{Size{sdlEvent.resize.w, sdlEvent.resize.h}};
-
-    // gain/lose focus, etc.
-    case SDL_ACTIVEEVENT: {
-      //   SDL_APPINPUTFOCUS  (0x01)
-      //   SDL_APPACTIVE      (0x02)
-      //   SDL_APPMOUSEFOCUS  (0x04)
-      if (sdlEvent.active.state & SDL_APPINPUTFOCUS) {
-        // Assume the mouse is inside the window. Actually checking the mouse
-        // state doesn't work in the case where we mouse click on another window
-        // that's partially covered by rlvm's window and then alt-tab back.
-        return Active{true};
-      } else if (sdlEvent.active.state & SDL_APPMOUSEFOCUS) {
-        return Active{sdlEvent.active.gain == 1};
+    // SDL 2 collapsed VIDEOEXPOSE / VIDEORESIZE / ACTIVEEVENT into per-window
+    // sub-events under SDL_WINDOWEVENT. We dispatch on .window.event.
+    case SDL_WINDOWEVENT: {
+      switch (sdlEvent.window.event) {
+        case SDL_WINDOWEVENT_EXPOSED:
+          return VideoExpose{};
+        case SDL_WINDOWEVENT_RESIZED:
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+          return VideoResize{
+              Size{sdlEvent.window.data1, sdlEvent.window.data2}};
+        case SDL_WINDOWEVENT_FOCUS_GAINED:
+          // Mirrors the SDL 1.2 SDL_APPINPUTFOCUS path (assume mouse inside).
+          return Active{true};
+        case SDL_WINDOWEVENT_ENTER:
+          return Active{true};
+        case SDL_WINDOWEVENT_LEAVE:
+          return Active{false};
+        default:
+          return std::monostate{};
       }
-      return std::monostate();
     }
 
     case SDL_KEYDOWN: {
@@ -107,6 +177,12 @@ Event translateSDLToEvent(const SDL_Event& sdlEvent) {
       mm.pos = {sdlEvent.motion.x, sdlEvent.motion.y};
       return mm;
     }
+
+    // SDL 2 emits SDL_MOUSEWHEEL as its own event type instead of fake button
+    // 4/5 presses. The SDL 1.2 path here had the wheel cases commented out,
+    // so we keep the no-op behavior for now and translate to monostate.
+    case SDL_MOUSEWHEEL:
+      return std::monostate{};
 
     // Unhandled event type
     default:

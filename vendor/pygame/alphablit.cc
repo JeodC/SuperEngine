@@ -21,7 +21,7 @@
     pete@shinners.org
 */
 
-#include <SDL/SDL.h>
+#include <SDL.h>
 
 
 #define PYGAME_BLEND_ADD  0x1
@@ -32,7 +32,11 @@
 
 
 
-/* The structure passed to the low level blit functions */
+/* The structure passed to the low level blit functions.
+ * src_alpha / src_colorkey / has_colorkey are populated from the source
+ * SDL_Surface at the call site; in SDL 1.2 these lived directly on
+ * SDL_PixelFormat::alpha/colorkey, but SDL 2 moved them to per-surface
+ * setters (SDL_GetSurfaceAlphaMod / SDL_GetColorKey / SDL_HasColorKey). */
 typedef struct {
         Uint8 *s_pixels;
         int s_width;
@@ -46,6 +50,9 @@ typedef struct {
         SDL_PixelFormat *src;
         Uint8 *table;
         SDL_PixelFormat *dst;
+        int src_alpha;       /* 0..255 */
+        Uint32 src_colorkey;
+        int has_colorkey;    /* 0 or 1 */
 } SDL_BlitInfo;
 static void alphablit_alpha(SDL_BlitInfo *info);
 static void alphablit_colorkey(SDL_BlitInfo *info);
@@ -101,14 +108,16 @@ static int SoftBlitPyGame(SDL_Surface *src, SDL_Rect *srcrect,
         if ( okay  && srcrect->w && srcrect->h ) {
                 SDL_BlitInfo info;
 
-                /* Set up the blit information */
-                info.s_pixels = (Uint8 *)src->pixels + src->offset +
+                /* Set up the blit information.
+                 * SDL 2 dropped SDL_Surface::offset (sub-surfaces no longer
+                 * exist), so the offset is always 0. */
+                info.s_pixels = (Uint8 *)src->pixels +
                                 (Uint16)srcrect->y*src->pitch +
                                 (Uint16)srcrect->x*src->format->BytesPerPixel;
                 info.s_width = srcrect->w;
                 info.s_height = srcrect->h;
                 info.s_skip=src->pitch-info.s_width*src->format->BytesPerPixel;
-                info.d_pixels = (Uint8 *)dst->pixels + dst->offset +
+                info.d_pixels = (Uint8 *)dst->pixels +
                                 (Uint16)dstrect->y*dst->pitch +
                                 (Uint16)dstrect->x*dst->format->BytesPerPixel;
                 info.d_width = dstrect->w;
@@ -117,12 +126,30 @@ static int SoftBlitPyGame(SDL_Surface *src, SDL_Rect *srcrect,
                 info.src = src->format;
                 info.dst = dst->format;
 
+                /* SDL 2: alpha mod and colorkey live on the surface, not the
+                 * pixel format. Snapshot them into the BlitInfo struct so the
+                 * inner loops don't need to call SDL APIs per pixel. */
+                Uint8 src_alpha_mod = SDL_ALPHA_OPAQUE;
+                SDL_GetSurfaceAlphaMod(src, &src_alpha_mod);
+                info.src_alpha = src_alpha_mod;
+                info.has_colorkey =
+                    (SDL_GetColorKey(src, &info.src_colorkey) == 0) ? 1 : 0;
+                if (!info.has_colorkey)
+                    info.src_colorkey = 0;
+
+                /* SDL 2: SDL_BlendMode replaces the SDL_SRCALPHA flag.
+                 * If the surface has BLENDMODE_BLEND and an Amask, use the
+                 * per-pixel alpha path. */
+                SDL_BlendMode blend_mode = SDL_BLENDMODE_NONE;
+                SDL_GetSurfaceBlendMode(src, &blend_mode);
+                int has_src_alpha = (blend_mode == SDL_BLENDMODE_BLEND);
+
                 switch(the_args) {
                     case 0:
                     {
-                        if(src->flags&SDL_SRCALPHA && src->format->Amask)
+                        if(has_src_alpha && src->format->Amask)
                             alphablit_alpha(&info);
-                        else if(src->flags & SDL_SRCCOLORKEY)
+                        else if(info.has_colorkey)
                             alphablit_colorkey(&info);
                         else
                             alphablit_solid(&info);
@@ -514,8 +541,8 @@ static void alphablit_colorkey(SDL_BlitInfo *info)
         int srcbpp = srcfmt->BytesPerPixel;
         int dstbpp = dstfmt->BytesPerPixel;
         int dR, dG, dB, dA, sR, sG, sB, sA;
-        int alpha = srcfmt->alpha;
-        Uint32 colorkey = srcfmt->colorkey;
+        int alpha = info->src_alpha;
+        Uint32 colorkey = info->src_colorkey;
 
         while ( height-- )
         {
@@ -550,7 +577,7 @@ static void alphablit_solid(SDL_BlitInfo *info)
         int srcbpp = srcfmt->BytesPerPixel;
         int dstbpp = dstfmt->BytesPerPixel;
         int dR, dG, dB, dA, sR, sG, sB, sA;
-        int alpha = srcfmt->alpha;
+        int alpha = info->src_alpha;
 
         while ( height-- )
         {

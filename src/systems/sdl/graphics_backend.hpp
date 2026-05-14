@@ -29,6 +29,8 @@
 #include <string>
 
 struct SDL_Surface;
+struct SDL_Window;
+typedef void* SDL_GLContext;
 class glTexture;
 
 class MouseCursor;
@@ -70,7 +72,8 @@ class SDLGraphicsBackend : public IGraphicsBackend {
       const DrawCallback& draw_scene) override;
 
  private:
-  SDL_Surface* screen_;
+  SDL_Window* window_;
+  SDL_GLContext gl_context_;
   std::shared_ptr<glTexture> screen_contents_texture_;
   bool screen_contents_texture_valid_;
   std::string current_window_title_;

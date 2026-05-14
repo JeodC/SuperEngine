@@ -28,7 +28,7 @@
 #include "log/domain_logger.hpp"
 #include "systems/sdl_surface.hpp"
 
-#include <SDL/SDL_ttf.h>
+#include <SDL_ttf.h>
 
 #include <cassert>
 #include <string>

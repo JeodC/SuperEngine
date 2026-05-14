@@ -27,7 +27,7 @@
 #include "systems/gl_utils.hpp"
 #include "systems/gltexture.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 
 #include <stdexcept>
 

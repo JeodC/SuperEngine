@@ -6,21 +6,19 @@ configure_file(
 )
 
 set(RLVM_REQUIRED_LIBRARIES
-    ${SDL1_LIBRARIES}
+    ${SDL2_LIBRARIES}
+    ${SDL2_IMAGE_LIBRARIES}
+    ${SDL2_MIXER_LIBRARIES}
+    ${SDL2_TTF_LIBRARIES}
     ${ZLIB_LIBRARIES}
     ${OPENGL_LIBRARIES}
     ${Boost_LIBRARIES}
-    ${GLEW_LIBRARIES}
     VorbisFile::VorbisFile
     glm::glm
     xclannad
     pygame
     samplerate
-    sdl_image
-    sdl_ttf
-    sdl_mixer
     utf8cpp
-    TBB::tbb
 )
 
 # -------------------------------------------------------------------

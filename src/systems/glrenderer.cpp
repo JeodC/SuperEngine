@@ -29,7 +29,7 @@
 #include "systems/gltexture.hpp"
 #include "systems/sdl/shaders.hpp"
 
-#include <GL/glew.h>
+#include "systems/gl_loader.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
 #include <format>
