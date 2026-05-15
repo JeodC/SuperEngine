@@ -101,6 +101,11 @@ class TextSystem final : public EventListener {
   TextSystem(System& system, Gameexe& gexe, std::unique_ptr<ITextSystem> impl);
   virtual ~TextSystem();
 
+  void SetDefaultFontFile(std::filesystem::path path) {
+    default_font_file_ = std::move(path);
+    font_cache_.clear();
+  }
+
   // Controls whether the text system is rendered at all.
   bool system_visible() const { return system_visible_; }
   void set_system_visible(bool in) { system_visible_ = in; }

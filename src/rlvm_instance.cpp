@@ -32,6 +32,7 @@
 #include "machine/serialization.hpp"
 #include "platforms/implementor.hpp"
 #include "systems/base/system_error.hpp"
+#include "systems/base/text_system.hpp"
 #include "systems/sdl/sdl_system.hpp"
 #include "utf8.h"
 #include "utilities/clock.hpp"
@@ -67,6 +68,9 @@ void RLVMInstance::Main(const std::filesystem::path& gameroot) {
     logger(Severity::Error) << "Failed to load game:\n" << e.what();
     std::terminate();
   }
+
+  if (!custom_font_.empty())
+    system_->text().SetDefaultFontFile(custom_font_);
 
   try {
     Clock clock;

@@ -112,15 +112,23 @@ void loadGlobalMemory(RLMachine& machine) {
       // data is corrupted. Either way, we can't safely do ANYTHING with this
       // game's entire save data so move it out of the way.
       fs::path save_dir = machine.GetSystem().GameSaveDirectory();
-      fs::path dest_save_dir = save_dir.parent_path() /
-                               (save_dir.filename() / ".old_corrupted_data");
+      fs::path dest_save_dir =
+          save_dir.parent_path() /
+          (save_dir.filename().string() + ".old_corrupted_data");
 
-      if (fs::exists(dest_save_dir))
-        fs::remove_all(dest_save_dir);
-      fs::rename(save_dir, dest_save_dir);
-
-      std::cerr << "WARNING: Unable to read saved global memory file. Moving "
-                << save_dir << " to " << dest_save_dir << std::endl;
+      try {
+        if (fs::exists(dest_save_dir))
+          fs::remove_all(dest_save_dir);
+        fs::rename(save_dir, dest_save_dir);
+        std::cerr << "WARNING: Unable to read saved global memory file. Moved "
+                  << save_dir << " to " << dest_save_dir << std::endl;
+      } catch (const fs::filesystem_error& fs_e) {
+        std::cerr << "WARNING: Unable to read saved global memory file and "
+                  << "could not rename " << save_dir << " aside ("
+                  << fs_e.what() << "). Continuing with the existing dir; "
+                  << "delete the broken global.dat manually if needed."
+                  << std::endl;
+      }
     }
   }
 }
