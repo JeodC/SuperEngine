@@ -65,6 +65,14 @@ class ObjRangeAdapter : public RLOp_SpecialCase {
   virtual void operator()(RLMachine& machine,
                           const libreallive::CommandElement& ff) final;
 
+  // Forward module-level property settings (P_FGBG etc.) to the wrapped
+  // handler too — the module's SetProperty walks stored_operations_ which
+  // contains us, so without this the inner handler never sees the property.
+  void SetProperty(int property, int value) override {
+    RLOperation::SetProperty(property, value);
+    handler->SetProperty(property, value);
+  }
+
  private:
   std::shared_ptr<RLOperation> handler;
 };
@@ -88,6 +96,11 @@ class ChildObjAdapter : public RLOp_SpecialCase {
   virtual void operator()(RLMachine& machine,
                           const libreallive::CommandElement& ff) final;
 
+  void SetProperty(int property, int value) override {
+    RLOperation::SetProperty(property, value);
+    handler->SetProperty(property, value);
+  }
+
  private:
   std::shared_ptr<RLOperation> handler;
 };
@@ -105,6 +118,11 @@ class ChildObjRangeAdapter : public RLOp_SpecialCase {
 
   virtual void operator()(RLMachine& machine,
                           const libreallive::CommandElement& ff) final;
+
+  void SetProperty(int property, int value) override {
+    RLOperation::SetProperty(property, value);
+    handler->SetProperty(property, value);
+  }
 
  private:
   std::shared_ptr<RLOperation> handler;

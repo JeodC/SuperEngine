@@ -97,7 +97,7 @@ class RLOperation {
   void SetName(std::string name) { name_.swap(name); }
   const std::string& Name() const { return name_; }
 
-  void SetProperty(int property, int value);
+  virtual void SetProperty(int property, int value);
   bool GetProperty(int property, int& value) const;
 
   // The Dispatch function is implemented on a per type basis and is called by

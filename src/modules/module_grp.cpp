@@ -1190,6 +1190,11 @@ class GrpStackAdapter : public RLOp_SpecialCase {
         ff.GetSerializedCommand(machine));
   }
 
+  void SetProperty(int property, int value) override {
+    RLOperation::SetProperty(property, value);
+    operation->SetProperty(property, value);
+  }
+
  private:
   std::shared_ptr<RLOperation> operation;
 };

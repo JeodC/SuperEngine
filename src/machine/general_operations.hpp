@@ -142,6 +142,11 @@ class MultiDispatch : public RLOp_SpecialCase {
   virtual void operator()(RLMachine& machine,
                           const libreallive::CommandElement& ff) override;
 
+  void SetProperty(int property, int value) override {
+    RLOperation::SetProperty(property, value);
+    handler_->SetProperty(property, value);
+  }
+
  private:
   std::unique_ptr<RLOperation> handler_;
 };
