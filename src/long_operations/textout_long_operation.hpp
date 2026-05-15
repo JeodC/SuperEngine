@@ -57,6 +57,8 @@ class TextoutLongOperation : public LongOperation {
   bool DisplayName(RLMachine& machine);
   bool DisplayOneMoreCharacter(RLMachine& machine, bool& paused);
 
+  RLMachine& machine_;
+
   std::string utf8_string_;
 
   int current_codepoint_;

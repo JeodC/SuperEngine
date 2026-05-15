@@ -201,6 +201,21 @@ class System {
   // Called by various LongOperations to show the right click menu.
   void ShowSyscomMenu(RLMachine& machine);
 
+  // True while a CANCELCALL syscom menu Farcall is on the call stack.
+  // Set in ShowSyscomMenu, reset by the MenuReseter long op pushed
+  // alongside the Farcall. Used to suppress engine-driven auto-advance
+  // (auto-mode timer in PauseLongOperation) while the user is interacting
+  // with the menu.
+  bool in_menu() const { return in_menu_; }
+
+  // Group last passed to objbtn_init(group). Used by the
+  // select_btnobjnow_{hit,push,decide} polling opcodes — the script polls
+  // them every frame in a refresh()/goto loop and the engine has to know
+  // which button group to query against. SS's settings/options screens
+  // use this polling pattern (scene 1003 entry-point dispatch @1217 etc.).
+  void set_objbtn_polling_group(int group) { objbtn_polling_group_ = group; }
+  int objbtn_polling_group() const { return objbtn_polling_group_; }
+
   // If there is a standard dialog box associated with syscom, it is
   // displayed; if there is a standard action, it is performed. The list of
   // menu commands in section 4.5 has details of which menu commands have
@@ -279,6 +294,9 @@ class System {
 
   // Whether the SYSCOM menu is currently being displayed.
   bool in_menu_;
+
+  // Last group registered by objbtn_init for the btnobjnow polling opcodes.
+  int objbtn_polling_group_ = 0;
 
   // Whether we are being forced to fast forward through the game for testing
   // reasons.

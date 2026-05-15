@@ -32,18 +32,22 @@
 #include <vector>
 
 #include "core/gameexe.hpp"
+#include "core/rlevent_listener.hpp"
 #include "libreallive/parser.hpp"
 #include "long_operations/button_object_select_long_operation.hpp"
 #include "long_operations/select_long_operation.hpp"
 #include "machine/rlmachine.hpp"
 #include "machine/rloperation.hpp"
 #include "machine/rloperation/rlop_store.hpp"
+#include "object/drawer/parent.hpp"
+#include "object/objdrawer.hpp"
 #include "systems/base/graphics_object.hpp"
 #include "systems/base/graphics_system.hpp"
 #include "systems/base/system.hpp"
 #include "systems/base/text_system.hpp"
 #include "systems/base/text_window.hpp"
 #include "systems/event_system.hpp"
+#include "utilities/lazy_array.hpp"
 #include "utilities/string_utilities.hpp"
 
 using libreallive::CommandElement;
@@ -178,25 +182,129 @@ struct Sel_select_objbtn_cancel_2 : public RLOpcode<> {
   }
 };
 
-// Our system doesn't need an explicit initialize.
+// objbtn_init(group): register the active button group for the
+// btnobjnow_{hit,push,decide} polling opcodes below. The script doesn't
+// have a way to pass the group through the polling calls, so the engine
+// remembers it on the System.
 struct objbtn_init_0 : public RLOpcode<IntConstant_T> {
-  void operator()(RLMachine& machine, int ignored) {}
+  void operator()(RLMachine& machine, int group) {
+    machine.GetSystem().set_objbtn_polling_group(group);
+  }
 };
 
+// No-arg variant: leave the group at whatever was previously set.
 struct objbtn_init_1 : public RLOpcode<> {
   void operator()(RLMachine& machine) {}
 };
 
+namespace {
+
+// Find the topmost button (in the polling group) currently under |cursor|.
+// Scans foreground first, then background; returns the inner GraphicsObject
+// (and its parent if any) so the caller can read button_number / etc.
+//
+// The look-up has to mirror what ButtonObjectSelectLongOperation does —
+// scenes can place button objects directly on a layer, or as children of
+// a parent obj (objOfChild). SS's options menu uses parent-with-children
+// in the BG layer (scene 1002), so we have to handle both.
+GraphicsObject* FindButtonAt(System& sys, int group, Point cursor) {
+  GraphicsObject* hit = nullptr;
+  auto try_obj = [&](GraphicsObject& obj, GraphicsObject* parent) {
+    if (!obj.has_object_data())
+      return;
+    if (!obj.Param().IsButton())
+      return;
+    if (obj.Param().GetButtonGroup() != group)
+      return;
+    GraphicsObjectData& data = obj.GetObjectData();
+    Rect r = data.DstRect(obj, parent);
+    if (r.Contains(cursor))
+      hit = &obj;
+  };
+  auto scan_layer = [&](LazyArray<GraphicsObject>& layer) {
+    for (GraphicsObject& obj : layer) {
+      try_obj(obj, nullptr);
+      if (hit)
+        return;
+      if (obj.has_object_data()) {
+        ParentGraphicsObjectData* parent =
+            dynamic_cast<ParentGraphicsObjectData*>(&obj.GetObjectData());
+        if (parent) {
+          for (GraphicsObject& child : parent->objects()) {
+            try_obj(child, &obj);
+            if (hit)
+              return;
+          }
+        }
+      }
+    }
+  };
+  GraphicsSystem& gs = sys.graphics();
+  scan_layer(gs.GetForegroundObjects());
+  if (!hit)
+    scan_layer(gs.GetBackgroundObjects());
+  return hit;
+}
+
+}  // namespace
+
+// btnobjnow_hit: which button (button_number) is the cursor currently
+// hovering over? -1 if none. No state change, just a query.
 struct btnobjnow_hit : public RLStoreOpcode<> {
-  int operator()(RLMachine& machine) override { return -1; }
+  int operator()(RLMachine& machine) override {
+    System& sys = machine.GetSystem();
+    Point cursor = sys.rlEvent().GetCursorPos();
+    GraphicsObject* btn =
+        FindButtonAt(sys, sys.objbtn_polling_group(), cursor);
+    return btn ? btn->Param().GetButtonNumber() : -1;
+  }
 };
 
+// btnobjnow_push: which button is the cursor currently HELD DOWN over
+// with the left mouse button? -1 if none / not held. Used by the script
+// to drive "pressed" visual feedback.
 struct btnobjnow_push : public RLStoreOpcode<> {
-  int operator()(RLMachine& machine) override { return -1; }
+  int operator()(RLMachine& machine) override {
+    System& sys = machine.GetSystem();
+    Point pos;
+    int b1 = 0, b2 = 0;
+    sys.rlEvent().GetCursorPos(pos, b1, b2);
+    if (b1 != 1)  // 1 == currently pressed; 2 == press+release
+      return -1;
+    GraphicsObject* btn =
+        FindButtonAt(sys, sys.objbtn_polling_group(), pos);
+    return btn ? btn->Param().GetButtonNumber() : -1;
+  }
 };
 
+// btnobjnow_decide: did the user just decide on a button (left-click
+// release over a button) or cancel (right-click release)?
+//   >=0  → button_number of the clicked button
+//   -1   → user right-clicked (cancel)
+//   -2   → no decision yet, keep polling
+//
+// Flushes the click state on a hit so the script's polling loop doesn't
+// see the same click twice.
 struct btnobjnow_decide : public RLStoreOpcode<> {
-  int operator()(RLMachine& machine) override { return -2; }
+  int operator()(RLMachine& machine) override {
+    System& sys = machine.GetSystem();
+    Point pos;
+    int b1 = 0, b2 = 0;
+    sys.rlEvent().GetCursorPos(pos, b1, b2);
+
+    if (b2 == 2) {  // right-click released → cancel
+      sys.rlEvent().FlushMouseClicks();
+      return -1;
+    }
+    if (b1 == 2) {  // left-click released → check for hit
+      GraphicsObject* btn =
+          FindButtonAt(sys, sys.objbtn_polling_group(), pos);
+      sys.rlEvent().FlushMouseClicks();
+      if (btn)
+        return btn->Param().GetButtonNumber();
+    }
+    return -2;
+  }
 };
 }  // namespace
 

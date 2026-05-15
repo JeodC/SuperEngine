@@ -54,7 +54,8 @@ int TextoutLongOperation::next_character_countdown_ = 0;
 
 TextoutLongOperation::TextoutLongOperation(RLMachine& machine,
                                            const std::string& utf8string)
-    : utf8_string_(utf8string),
+    : machine_(machine),
+      utf8_string_(utf8string),
       current_codepoint_(0),
       current_position_(utf8_string_.begin()),
       no_wait_(false) {
@@ -103,12 +104,23 @@ bool TextoutLongOperation::OnMouseButtonStateChanged(MouseButton mouseButton,
     return true;
   }
 
+  if (pressed && mouseButton == MouseButton::RIGHT) {
+    machine_.GetSystem().ShowSyscomMenu(machine_);
+    return true;
+  }
+
   return false;
 }
 
 bool TextoutLongOperation::OnKeyStateChanged(KeyCode keyCode, bool pressed) {
   if (pressed && (keyCode == KeyCode::LCTRL || keyCode == KeyCode::RCTRL)) {
     no_wait_ = true;
+    return true;
+  }
+
+  // ESC mirrors right-click — handheld back button maps to ESC via gptokeyb.
+  if (pressed && keyCode == KeyCode::ESCAPE) {
+    machine_.GetSystem().ShowSyscomMenu(machine_);
     return true;
   }
 

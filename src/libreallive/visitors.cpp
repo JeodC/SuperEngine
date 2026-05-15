@@ -43,8 +43,13 @@ std::string DebugStringVisitor::operator()(MetaElement const* meta) {
   std::string type_str;
   switch (meta->type_) {
     case MetaElement::Entrypoint_:
-      type_str = "entrypoint";
-      break;
+      // For entrypoint markers, value_ is the kidoku table index; the
+      // actual runtime entrypoint number (the one Scriptor::LoadEntry
+      // looks up against entrypoints_) is entrypoint_index_. Emit both
+      // so disassembler readers can map between Gameexe.ini's
+      // CANCELCALL=N,M (which uses runtime index) and the bytecode.
+      return std::format("#entrypoint {}  ; (kidoku #{})",
+                         meta->entrypoint_index_, meta->value_);
     case MetaElement::Kidoku_:
       type_str = "kidoku";
       break;
@@ -65,9 +70,16 @@ std::string DebugStringVisitor::operator()(CommandElement const* cmd) {
     repr.clear();
   }
 
+  // Always include module info even for named commands so we can tell
+  // which module variant a call (e.g. objOfFile) actually resolves to.
+  std::string mod_tag =
+      std::format("<{}:{:03}:{:05},{}>", cmd->modtype(), cmd->module(),
+                  cmd->opcode(), cmd->overload());
+
   if (repr.empty())
-    repr = std::format("op<{}:{:03}:{:05}, {}>", cmd->modtype(), cmd->module(),
-                       cmd->opcode(), cmd->overload());
+    repr = "op" + mod_tag;
+  else
+    repr += mod_tag;
 
   repr += '(';
   bool first = true;

@@ -32,6 +32,7 @@
 #include "systems/base/graphics_object.hpp"
 #include "systems/base/graphics_system.hpp"
 #include "systems/base/system.hpp"
+#include "utilities/lazy_array.hpp"
 
 ButtonObjectSelectLongOperation::ButtonObjectSelectLongOperation(
     RLMachine& machine,
@@ -44,24 +45,35 @@ ButtonObjectSelectLongOperation::ButtonObjectSelectLongOperation(
       gameexe_(machine.GetSystem().gameexe()),
       currently_hovering_button_(NULL),
       currently_pressed_button_(NULL) {
+  // Scan BOTH the foreground and background object layers. Custom CANCELCALL
+  // menus in some games (notably Clannad Side Stories' scene 1003 — the
+  // syscom UI invoked by CANCELCALL) build their button objects in the
+  // background layer (ChildObjBg / ObjBg modules 1:72, 2:72, 2:82), not the
+  // foreground. Without this we'd miss every button, buttons_ would be
+  // empty, has_return_value_ would never get set, and the long op would
+  // wait forever — which is exactly what SS does on right-click.
   GraphicsSystem& graphics = machine.GetSystem().graphics();
-  for (GraphicsObject& obj : graphics.GetForegroundObjects()) {
-    if (obj.Param().IsButton() && obj.Param().GetButtonGroup() == group_) {
-      buttons_.emplace_back(&obj, static_cast<GraphicsObject*>(NULL));
-    } else if (obj.has_object_data()) {
-      ParentGraphicsObjectData* parent =
-          dynamic_cast<ParentGraphicsObjectData*>(&obj.GetObjectData());
+  auto scan_layer = [&](LazyArray<GraphicsObject>& layer) {
+    for (GraphicsObject& obj : layer) {
+      if (obj.Param().IsButton() && obj.Param().GetButtonGroup() == group_) {
+        buttons_.emplace_back(&obj, static_cast<GraphicsObject*>(NULL));
+      } else if (obj.has_object_data()) {
+        ParentGraphicsObjectData* parent =
+            dynamic_cast<ParentGraphicsObjectData*>(&obj.GetObjectData());
 
-      if (parent) {
-        for (GraphicsObject& child : parent->objects()) {
-          if (child.Param().IsButton() &&
-              child.Param().GetButtonGroup() == group_) {
-            buttons_.emplace_back(&child, &obj);
+        if (parent) {
+          for (GraphicsObject& child : parent->objects()) {
+            if (child.Param().IsButton() &&
+                child.Param().GetButtonGroup() == group_) {
+              buttons_.emplace_back(&child, &obj);
+            }
           }
         }
       }
     }
-  }
+  };
+  scan_layer(graphics.GetForegroundObjects());
+  scan_layer(graphics.GetBackgroundObjects());
 
   // Initialize overrides on all buttons that we'll use.
   for (ButtonPair& button_pair : buttons_) {

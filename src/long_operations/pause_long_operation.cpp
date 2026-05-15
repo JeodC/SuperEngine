@@ -194,8 +194,18 @@ bool PauseLongOperation::OnKeyStateChanged(KeyCode keyCode, bool pressed) {
 }
 
 bool PauseLongOperation::operator()(RLMachine& machine) {
-  // Check to see if we're done because of the auto mode timer
-  if (machine_.GetSystem().text().auto_mode()) {
+  // Check to see if we're done because of the auto mode timer.
+  //
+  // Skip the auto-mode firing entirely while we're inside a syscom menu
+  // Farcall (System::in_menu()). The CANCELCALL script may push its own
+  // pauses to wait for the user to click a menu button, and if auto-mode
+  // is active those pauses auto-complete instantly and the script blasts
+  // through the menu loop. The visible symptom is "menu drawn but no
+  // pause" — Clannad Side Stories is the obvious case (it's auto-text-
+  // only, so there's no other context where this would surface), but
+  // any auto-mode game with a custom CANCELCALL menu will hit it.
+  if (machine_.GetSystem().text().auto_mode() &&
+      !machine_.GetSystem().in_menu()) {
     if (AutomodeTimerFired() && !machine_.GetSystem().sound().KoePlaying())
       is_done_ = true;
   }
