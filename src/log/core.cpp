@@ -71,6 +71,8 @@ void SetupLogging(Severity minSeverity) {
   namespace sinks = boost::log::sinks;
   namespace attrs = boost::log::attributes;
 
+  logging::core::get()->remove_all_sinks();
+
   using text_sink =
       typename sinks::synchronous_sink<sinks::text_ostream_backend>;
   boost::shared_ptr<text_sink> sink = boost::make_shared<text_sink>();
