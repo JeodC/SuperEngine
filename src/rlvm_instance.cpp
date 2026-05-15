@@ -100,13 +100,15 @@ void RLVMInstance::Main(const std::filesystem::path& gameroot) {
 
       // Sleep to be nice to the processor and to give the GPU a chance to
       // catch up.
+      using std::chrono_literals::operator""ms;
       if (!system_->ShouldFastForward()) {
         auto real_sleep_time = frame_time - (end - start);
-        using std::chrono_literals::operator""ms;
         if (real_sleep_time < 1ms)
           real_sleep_time = 1ms;
 
         std::this_thread::sleep_for(real_sleep_time);
+      } else {
+        std::this_thread::sleep_for(1ms);
       }
 
       system_->set_force_wait(false);
