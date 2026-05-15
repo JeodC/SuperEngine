@@ -133,10 +133,15 @@ void ButtonObjectSelectLongOperation::OnEvent(std::shared_ptr<Event> event) {
             machine_.GetSystem().graphics().ForceRefresh();
 
             return true;
-          } else if (event.button == MouseButton::RIGHT && !pressed &&
-                     cancelable_) {
-            has_return_value_ = true;
-            return_value_ = -1;
+          } else if (event.button == MouseButton::RIGHT) {
+            if (cancelable_ && !pressed) {
+              has_return_value_ = true;
+              return_value_ = -1;
+            } else if (!cancelable_ && pressed) {
+              // Mirror SelectLongOperation
+              machine_.GetSystem().ShowSyscomMenu(machine_);
+              return true;
+            }
           }
 
           return false;

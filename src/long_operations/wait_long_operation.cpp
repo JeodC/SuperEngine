@@ -111,6 +111,9 @@ bool WaitLongOperation::OnMouseButtonStateChanged(MouseButton mouseButton,
       button_pressed_ = -1;
       return true;
     }
+  } else if (pressed && mouseButton == MouseButton::RIGHT) {
+    machine_.GetSystem().ShowSyscomMenu(machine_);
+    return true;
   }
 
   return false;
