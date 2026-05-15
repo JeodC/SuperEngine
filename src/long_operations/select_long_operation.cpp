@@ -218,6 +218,13 @@ void NormalSelectLongOperation::OnEvent(std::shared_ptr<Event> event) {
           return this->OnMouseButtonStateChanged(event.button,
                                                  std::same_as<T, MouseDown>);
 
+        if constexpr (std::same_as<T, KeyDown>) {
+          if (event.code == KeyCode::ESCAPE) {
+            machine_.GetSystem().ShowSyscomMenu(machine_);
+            return true;
+          }
+        }
+
         return false;
       },
       *event);
@@ -411,6 +418,13 @@ void ButtonSelectLongOperation::OnEvent(std::shared_ptr<Event> event) {
         if constexpr (std::same_as<T, MouseDown> || std::same_as<T, MouseUp>)
           return this->OnMouseButtonStateChanged(event.button,
                                                  std::same_as<T, MouseDown>);
+
+        if constexpr (std::same_as<T, KeyDown>) {
+          if (event.code == KeyCode::ESCAPE) {
+            machine_.GetSystem().ShowSyscomMenu(machine_);
+            return true;
+          }
+        }
 
         return false;
       },

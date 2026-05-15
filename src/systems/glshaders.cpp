@@ -29,6 +29,44 @@
 #include "systems/gl_loader.hpp"
 
 std::shared_ptr<glslProgram> _GetColorMaskShader() {
+#ifdef RLVM_USE_GLES2
+  static constexpr std::string_view vertex_src = R"glsl(
+#version 100
+
+attribute vec2 aPos;
+attribute vec2 aTexCoord0;
+attribute vec2 aTexCoord1;
+
+varying vec2 TexCoord0;
+varying vec2 TexCoord1;
+
+void main(){
+  gl_Position = vec4(aPos, 0.0, 1.0);
+  TexCoord0 = aTexCoord0;
+  TexCoord1 = aTexCoord1;
+}
+)glsl";
+  static constexpr std::string_view fragment_src = R"glsl(
+#version 100
+precision mediump float;
+
+varying vec2 TexCoord0;
+varying vec2 TexCoord1;
+
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform vec4 color;
+
+void main(){
+  vec4 bg_color = texture2D(texture0, TexCoord0);
+  vec4 mask_sample = texture2D(texture1, TexCoord1);
+
+  float mask_strength = clamp(mask_sample.a * color.a, 0.0, 1.0);
+  vec4 blended_color = bg_color - mask_strength + color * mask_strength;
+  gl_FragColor = clamp(blended_color, 0.0, 1.0);
+}
+)glsl";
+#else
   static constexpr std::string_view vertex_src = R"glsl(
 #version 330 core
 
@@ -65,12 +103,94 @@ void main(){
   FragColor = clamp(blended_color, 0.0, 1.0);
 }
 )glsl";
+#endif
 
-  static auto shader = std::make_shared<glslProgram>(vertex_src, fragment_src);
+  static auto shader = std::make_shared<glslProgram>(
+      vertex_src, fragment_src,
+      std::initializer_list<glslProgram::AttribBinding>{
+          {0, "aPos"}, {1, "aTexCoord0"}, {2, "aTexCoord1"}});
   return shader;
 }
 
 std::shared_ptr<glslProgram> _GetObjectShader() {
+#ifdef RLVM_USE_GLES2
+  static constexpr std::string_view vertex_src = R"glsl(
+#version 100
+
+attribute vec2 aPos;
+attribute vec2 aTexCoord;
+attribute float aOpacity;
+
+varying vec2 TexCoord;
+varying float Opacity;
+
+void main(){
+  gl_Position = vec4(aPos, 0.0, 1.0);
+  TexCoord = aTexCoord;
+  Opacity = aOpacity;
+}
+)glsl";
+  static constexpr std::string_view fragment_src = R"glsl(
+#version 100
+precision mediump float;
+
+varying vec2 TexCoord;
+varying float Opacity;
+
+uniform sampler2D texture0;
+uniform vec4 color;
+uniform vec4 mask_color;
+uniform float mono;
+uniform float invert;
+uniform float light;
+uniform vec3 tint;
+uniform float alpha;
+
+void tinter(in float pixel_val, in float tint_val, out float mixed) {
+  if (tint_val > 0.0) {
+    mixed = pixel_val + tint_val - (pixel_val * tint_val);
+  } else if (tint_val < 0.0) {
+    mixed = pixel_val * abs(tint_val);
+  } else {
+    mixed = pixel_val;
+  }
+}
+
+void main() {
+  vec4 pixel = texture2D(texture0, TexCoord);
+
+  vec3 colored = mix(pixel.rgb, color.rgb, color.a);
+  colored = clamp(colored + mask_color.rgb*mask_color.a, 0.0, 1.0);
+  pixel = vec4(colored, pixel.a);
+
+  if (mono > 0.0) {
+    float gray = dot(pixel.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 mixed = mix(pixel.rgb, vec3(gray), mono);
+    pixel.rgb = mixed;
+  }
+
+  if (invert > 0.0) {
+    vec3 inverted = vec3(1.0) - pixel.rgb;
+    vec3 mixed = mix(pixel.rgb, inverted, invert);
+    pixel.rgb = mixed;
+  }
+
+  float out_r, out_g, out_b;
+  tinter(pixel.r, light, out_r);
+  tinter(pixel.g, light, out_g);
+  tinter(pixel.b, light, out_b);
+  pixel.rgb = vec3(out_r, out_g, out_b);
+
+  tinter(pixel.r, tint.r, out_r);
+  tinter(pixel.g, tint.g, out_g);
+  tinter(pixel.b, tint.b, out_b);
+  pixel.rgb = vec3(out_r, out_g, out_b);
+
+  pixel.a *= alpha * Opacity;
+  gl_FragColor = pixel;
+}
+)glsl";
+#else
   static constexpr std::string_view vertex_src = R"glsl(
 #version 330 core
 
@@ -116,44 +236,42 @@ void tinter(in float pixel_val, in float tint_val, out float mixed) {
 void main() {
   vec4 pixel = texture(texture0, TexCoord);
 
-  // Blend with the input color
   vec3 colored = mix(pixel.rgb, color.rgb, color.a);
   colored = clamp(colored + mask_color.rgb*mask_color.a, 0.0, 1.0);
   pixel = vec4(colored, pixel.a);
 
-  // Apply grayscale effect
   if (mono > 0.0) {
     float gray = dot(pixel.rgb, vec3(0.299, 0.587, 0.114));
     vec3 mixed = mix(pixel.rgb, vec3(gray), mono);
     pixel.rgb = mixed;
   }
 
-  // Apply inversion effect
   if (invert > 0.0) {
     vec3 inverted = vec3(1.0) - pixel.rgb;
     vec3 mixed = mix(pixel.rgb, inverted, invert);
     pixel.rgb = mixed;
   }
 
-  // Apply lighting adjustment
   float out_r, out_g, out_b;
   tinter(pixel.r, light, out_r);
   tinter(pixel.g, light, out_g);
   tinter(pixel.b, light, out_b);
   pixel.rgb = vec3(out_r, out_g, out_b);
 
-  // Apply tint
   tinter(pixel.r, tint.r, out_r);
   tinter(pixel.g, tint.g, out_g);
   tinter(pixel.b, tint.b, out_b);
   pixel.rgb = vec3(out_r, out_g, out_b);
 
-  // Adjust alpha
   pixel.a *= alpha * Opacity;
   FragColor = pixel;
 }
 )glsl";
+#endif
 
-  static auto shader = std::make_shared<glslProgram>(vertex_src, fragment_src);
+  static auto shader = std::make_shared<glslProgram>(
+      vertex_src, fragment_src,
+      std::initializer_list<glslProgram::AttribBinding>{
+          {0, "aPos"}, {1, "aTexCoord"}, {2, "aOpacity"}});
   return shader;
 }

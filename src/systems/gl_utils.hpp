@@ -20,14 +20,11 @@
 
 #pragma once
 
+#include <source_location>
 #include <string>
 
 std::string GetGLErrors();
-
-void ShowGLErrors();
-
+void ShowGLErrors(std::source_location loc = std::source_location::current());
 bool IsNPOTSafe();
-
 int GetMaxTextureSize();
-
 int SafeSize(int i);

@@ -126,6 +126,11 @@ bool WaitLongOperation::OnKeyStateChanged(KeyCode keyCode, bool pressed) {
     return true;
   }
 
+  if (pressed && keyCode == KeyCode::ESCAPE) {
+    machine_.GetSystem().ShowSyscomMenu(machine_);
+    return true;
+  }
+
   return false;
 }
 

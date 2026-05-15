@@ -30,11 +30,13 @@ PFNGLBUFFERSUBDATAPROC glBufferSubData = nullptr;
 PFNGLGENBUFFERSPROC glGenBuffers = nullptr;
 
 PFNGLATTACHSHADERPROC glAttachShader = nullptr;
+PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation = nullptr;
 PFNGLCOMPILESHADERPROC glCompileShader = nullptr;
 PFNGLCREATEPROGRAMPROC glCreateProgram = nullptr;
 PFNGLCREATESHADERPROC glCreateShader = nullptr;
 PFNGLDELETEPROGRAMPROC glDeleteProgram = nullptr;
 PFNGLDELETESHADERPROC glDeleteShader = nullptr;
+PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray = nullptr;
 PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = nullptr;
 PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog = nullptr;
 PFNGLGETPROGRAMIVPROC glGetProgramiv = nullptr;
@@ -56,8 +58,10 @@ PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers = nullptr;
 PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D = nullptr;
 PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers = nullptr;
 
+#ifndef RLVM_USE_GLES2
 PFNGLBINDVERTEXARRAYPROC glBindVertexArray = nullptr;
 PFNGLGENVERTEXARRAYSPROC glGenVertexArrays = nullptr;
+#endif
 
 }  // extern "C"
 
@@ -93,11 +97,13 @@ bool InitGLFunctions(const char** missing_function_out) {
   LOAD(glGenBuffers);
 
   LOAD(glAttachShader);
+  LOAD(glBindAttribLocation);
   LOAD(glCompileShader);
   LOAD(glCreateProgram);
   LOAD(glCreateShader);
   LOAD(glDeleteProgram);
   LOAD(glDeleteShader);
+  LOAD(glDisableVertexAttribArray);
   LOAD(glEnableVertexAttribArray);
   LOAD(glGetProgramInfoLog);
   LOAD(glGetProgramiv);
@@ -119,8 +125,10 @@ bool InitGLFunctions(const char** missing_function_out) {
   LOAD(glFramebufferTexture2D);
   LOAD(glGenFramebuffers);
 
+#ifndef RLVM_USE_GLES2
   LOAD(glBindVertexArray);
   LOAD(glGenVertexArrays);
+#endif
 
   return true;
 }

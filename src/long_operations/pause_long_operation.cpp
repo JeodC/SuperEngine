@@ -183,6 +183,9 @@ bool PauseLongOperation::OnKeyStateChanged(KeyCode keyCode, bool pressed) {
           is_done_ = true;
 
         handled = true;
+      } else if (keyCode == KeyCode::ESCAPE) {
+        machine_.GetSystem().ShowSyscomMenu(machine_);
+        handled = true;
       }
     }
   }

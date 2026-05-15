@@ -32,13 +32,15 @@ extern PFNGLBUFFERDATAPROC glBufferData;
 extern PFNGLBUFFERSUBDATAPROC glBufferSubData;
 extern PFNGLGENBUFFERSPROC glGenBuffers;
 
-// GL 2.0 — shaders + vertex attribs
+// GL 2.0 / GLES 2.0 — shaders + vertex attribs
 extern PFNGLATTACHSHADERPROC glAttachShader;
+extern PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation;
 extern PFNGLCOMPILESHADERPROC glCompileShader;
 extern PFNGLCREATEPROGRAMPROC glCreateProgram;
 extern PFNGLCREATESHADERPROC glCreateShader;
 extern PFNGLDELETEPROGRAMPROC glDeleteProgram;
 extern PFNGLDELETESHADERPROC glDeleteShader;
+extern PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray;
 extern PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
 extern PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
 extern PFNGLGETPROGRAMIVPROC glGetProgramiv;
@@ -54,16 +56,19 @@ extern PFNGLUNIFORM4FPROC glUniform4f;
 extern PFNGLUSEPROGRAMPROC glUseProgram;
 extern PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
 
-// GL 3.0 — framebuffer objects (ARB_framebuffer_object promoted to core)
+// GLES 2.0 — framebuffer objects (also GL 3.0 core via ARB_framebuffer_object)
 extern PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 extern PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 extern PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
 extern PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 extern PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
 
-// GL 3.0 — vertex array objects
+#ifndef RLVM_USE_GLES2
+// GL 3.0 — vertex array objects. Required under desktop core profile;
+// not present in GLES 2.0 (without OES_vertex_array_object).
 extern PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
 extern PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
+#endif
 
 #ifdef __cplusplus
 }

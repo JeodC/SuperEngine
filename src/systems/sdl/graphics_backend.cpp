@@ -74,11 +74,16 @@ SDLGraphicsBackend::SDLGraphicsBackend()
 void SDLGraphicsBackend::InitSystem(Size screen_size, bool is_fullscreen) {
   SDLSurface::screen_ = std::make_shared<ScreenCanvas>(screen_size);
 
-  // SDL 2 requires GL attributes set BEFORE the window is created.
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+#ifdef RLVM_USE_GLES2
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                      SDL_GL_CONTEXT_PROFILE_ES);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
 
   Uint32 window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
   if (is_fullscreen)
@@ -94,10 +99,6 @@ void SDLGraphicsBackend::InitSystem(Size screen_size, bool is_fullscreen) {
   if (!gl_context_)
     throw std::runtime_error("SDL_GL_CreateContext failed: "s + SDL_GetError());
 
-  // Resolve GL 1.2+ entry points via SDL_GL_GetProcAddress. Replaces the
-  // old GLEW dependency, which on KMS/DRM handhelds (Mali GLES + gl4es,
-  // ROCKNIX, etc.) failed to init because its default path probes for a
-  // GLX context that doesn't exist there.
   const char* missing = nullptr;
   if (!InitGLFunctions(&missing)) {
     throw std::runtime_error(
@@ -273,22 +274,10 @@ void SDLGraphicsBackend::RenderFrame(const RenderFrameConfig& config,
 
   glViewport(0, 0, config.display_size.width(), config.display_size.height());
 
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glOrtho(0.0, static_cast<GLdouble>(config.display_size.width()),
-          static_cast<GLdouble>(config.display_size.height()), 0.0, 0.0, 1.0);
-  ShowGLErrors();
-
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  ShowGLErrors();
-
-  const auto aspect_ratio_w = static_cast<float>(config.display_size.width()) /
-                              static_cast<float>(config.screen_size.width());
-  const auto aspect_ratio_h = static_cast<float>(config.display_size.height()) /
-                              static_cast<float>(config.screen_size.height());
-  glTranslatef(config.screen_origin.x() * aspect_ratio_w,
-               config.screen_origin.y() * aspect_ratio_h, 0.0f);
+  // Shaders (glshaders.cpp) write gl_Position directly in NDC, so the
+  // fixed-function projection/modelview stack is dead code on the modern
+  // pipeline. Dropped along with the GLES migration — those calls aren't
+  // available outside a compatibility profile anyway.
 
   if (draw_scene)
     draw_scene();
@@ -355,14 +344,14 @@ std::shared_ptr<Surface> SDLGraphicsBackend::RenderToSurface(
 
   std::vector<GLubyte> buf(width * height * 4);
   GLint prev_fbo = 0;
-  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_fbo);
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
   GLuint tmp_fbo = 0;
   glGenFramebuffers(1, &tmp_fbo);
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, tmp_fbo);
-  glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  glBindFramebuffer(GL_FRAMEBUFFER, tmp_fbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                          GL_TEXTURE_2D, texture->GetID(), 0);
   glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
+  glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
   glDeleteFramebuffers(1, &tmp_fbo);
 
   SDL_Surface* surface =

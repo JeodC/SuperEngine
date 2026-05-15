@@ -24,12 +24,19 @@
 
 #pragma once
 
+#include <initializer_list>
 #include <memory>
 #include <string_view>
+#include <utility>
 
 class glslProgram {
  public:
+  using AttribBinding = std::pair<unsigned int, std::string_view>;
+
   glslProgram(std::string_view vertex_src, std::string_view frag_src);
+  glslProgram(std::string_view vertex_src,
+              std::string_view frag_src,
+              std::initializer_list<AttribBinding> attribs);
   ~glslProgram();
 
   auto GetID() const { return id_; }
@@ -40,6 +47,10 @@ class glslProgram {
   void SetUniform(std::string_view name, float x, float y, float z);
 
  private:
+  void Build(std::string_view vertex_src,
+             std::string_view frag_src,
+             std::initializer_list<AttribBinding> attribs);
+
   unsigned int id_;
 };
 

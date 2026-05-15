@@ -43,5 +43,5 @@ class glFrameBuffer {
 
  private:
   std::shared_ptr<glTexture> texture_;
-  unsigned int id_;
+  unsigned int id_ = 0;
 };

@@ -35,22 +35,41 @@
 #include <format>
 
 struct glRenderer::glBuffer {
-  GLuint VAO, VBO, EBO;
+  GLuint VBO, EBO;
 };
+
+namespace {
+
+// Attribute locations bound by glslProgram before link. Must match the
+// vertex-attribute layout the shaders in glshaders.cpp expect.
+constexpr GLuint kAttrPos = 0;
+constexpr GLuint kAttrTexCoord = 1;       // ObjectShader: vec2 tex coord
+constexpr GLuint kAttrOpacity = 2;        // ObjectShader: float per-vertex opacity
+constexpr GLuint kAttrTexCoord0 = 1;      // ColorMaskShader: vec2 tex coord 0
+constexpr GLuint kAttrTexCoord1 = 2;      // ColorMaskShader: vec2 tex coord 1
+
+}  // namespace
 
 glRenderer::glRenderer() = default;
 glRenderer::~glRenderer() = default;
 
 void glRenderer::SetUp() {
-  glEnable(GL_TEXTURE_2D);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glShadeModel(GL_SMOOTH);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
-  glDisable(GL_LIGHTING);
   glEnable(GL_BLEND);
   glDepthFunc(GL_LEQUAL);
-  glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+
+#ifndef RLVM_USE_GLES2
+  static GLuint default_vao = []() {
+    GLuint vao = 0;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    return vao;
+  }();
+  (void)default_vao;
+#endif
+
   ShowGLErrors();
 }
 
@@ -61,6 +80,7 @@ void glRenderer::ClearBuffer(std::shared_ptr<glFrameBuffer> canvas,
                color.a_float());
   glClear(GL_COLOR_BUFFER_BIT);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  ShowGLErrors();
 }
 
 void glRenderer::RenderColormask(glRenderable src,
@@ -69,6 +89,9 @@ void glRenderer::RenderColormask(glRenderable src,
   auto canvas = dst.framebuf_;
   const auto canvas_size = canvas->GetSize();
   const auto texture_size = src.texture_->GetSize();
+
+  // Drain any GL errors set by code that ran before us.
+  ShowGLErrors();
 
   int x1 = src.region.x(), y1 = src.region.y(), x2 = src.region.x2(),
       y2 = src.region.y2();
@@ -96,30 +119,17 @@ void glRenderer::RenderColormask(glRenderable src,
   float bgy2 = 1.0f - float(fdy2) / canvas_size.height();
 
   static glBuffer buf = []() {
-    GLuint VAO, VBO, EBO;
-    unsigned int indices[] = {0, 1, 2, 0, 2, 3};
-    glGenVertexArrays(1, &VAO);
+    GLuint VBO, EBO;
+    GLushort indices[] = {0, 1, 2, 0, 2, 3};
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
-    glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, 24 * sizeof(float), NULL, GL_STREAM_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
                  GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                          (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                          (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                          (void*)(4 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
     ShowGLErrors();
-    return glBuffer{VAO, VBO, EBO};
+    return glBuffer{VBO, EBO};
   }();
 
   auto shader = _GetColorMaskShader();
@@ -135,7 +145,6 @@ void glRenderer::RenderColormask(glRenderable src,
                      mask.a_float());
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  glBindVertexArray(buf.VAO);
   float vertices[] = {
       dx1, dy1, bgx1, bgy1, thisx1, thisy1,  // NOLINT
       dx2, dy1, bgx2, bgy1, thisx2, thisy1,  // NOLINT
@@ -144,10 +153,27 @@ void glRenderer::RenderColormask(glRenderable src,
   };
   glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf.EBO);
 
+  // 6 floats per vertex: vec2 pos, vec2 tc0, vec2 tc1
+  const GLsizei stride = 6 * sizeof(float);
+  glVertexAttribPointer(kAttrPos, 2, GL_FLOAT, GL_FALSE, stride, (void*)0);
+  glEnableVertexAttribArray(kAttrPos);
+  glVertexAttribPointer(kAttrTexCoord0, 2, GL_FLOAT, GL_FALSE, stride,
+                        (void*)(2 * sizeof(float)));
+  glEnableVertexAttribArray(kAttrTexCoord0);
+  glVertexAttribPointer(kAttrTexCoord1, 2, GL_FLOAT, GL_FALSE, stride,
+                        (void*)(4 * sizeof(float)));
+  glEnableVertexAttribArray(kAttrTexCoord1);
+
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+
+  glDisableVertexAttribArray(kAttrPos);
+  glDisableVertexAttribArray(kAttrTexCoord0);
+  glDisableVertexAttribArray(kAttrTexCoord1);
   glUseProgram(0);
-  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBlendFunc(GL_ONE, GL_ZERO);
   ShowGLErrors();
@@ -164,32 +190,22 @@ void glRenderer::Render(glRenderable src,
   const auto canvas_size = canvas->GetSize();
   const auto texture_size = src.texture_->GetSize();
 
+  // Drain any GL errors set by code that ran before us so the checkpoint
+  // inside the static initializer below isn't mis-attributed.
+  ShowGLErrors();
+
   static glBuffer buf = []() {
-    GLuint VAO, VBO, EBO;
-    unsigned int indices[] = {0, 1, 2, 0, 2, 3};
-    glGenVertexArrays(1, &VAO);
+    GLuint VBO, EBO;
+    GLushort indices[] = {0, 1, 2, 0, 2, 3};
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
-    glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, 20 * sizeof(float), NULL, GL_STREAM_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
                  GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
-                          (void*)(4 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
     ShowGLErrors();
-    return glBuffer{VAO, VBO, EBO};
+    return glBuffer{VBO, EBO};
   }();
 
   int x1 = src.region.x(), y1 = src.region.y(), x2 = src.region.x2(),
@@ -230,11 +246,9 @@ void glRenderer::Render(glRenderable src,
       dx2, dy2, thisx2, thisy2, op[2],  // NOLINT
       dx1, dy2, thisx1, thisy2, op[3]   // NOLINT
   };
-  const GLuint VAO = buf.VAO, VBO = buf.VBO;
-  glBindVertexArray(VAO);
-
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBindBuffer(GL_ARRAY_BUFFER, buf.VBO);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf.EBO);
 
   auto shader = _GetObjectShader();
   glUseProgram(shader->GetID());
@@ -279,13 +293,28 @@ void glRenderer::Render(glRenderable src,
 
   auto tint = cfg.tint.value_or(RGBColour(0, 0, 0));
   shader->SetUniform("tint", tint.r_float(), tint.g_float(), tint.b_float());
+  shader->SetUniform("light", 0.0f);
 
-  glBindVertexArray(VAO);
+  // 5 floats per vertex: vec2 pos, vec2 tc, float opacity
+  const GLsizei stride = 5 * sizeof(float);
+  glVertexAttribPointer(kAttrPos, 2, GL_FLOAT, GL_FALSE, stride, (void*)0);
+  glEnableVertexAttribArray(kAttrPos);
+  glVertexAttribPointer(kAttrTexCoord, 2, GL_FLOAT, GL_FALSE, stride,
+                        (void*)(2 * sizeof(float)));
+  glEnableVertexAttribArray(kAttrTexCoord);
+  glVertexAttribPointer(kAttrOpacity, 1, GL_FLOAT, GL_FALSE, stride,
+                        (void*)(4 * sizeof(float)));
+  glEnableVertexAttribArray(kAttrOpacity);
+
   glBindFramebuffer(GL_FRAMEBUFFER, canvas->GetID());
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
 
+  glDisableVertexAttribArray(kAttrPos);
+  glDisableVertexAttribArray(kAttrTexCoord);
+  glDisableVertexAttribArray(kAttrOpacity);
   glUseProgram(0);
-  glBindVertexArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBlendFunc(GL_ONE, GL_ZERO);
   ShowGLErrors();

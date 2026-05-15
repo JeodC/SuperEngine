@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 option(RLVM_BUILD_TESTS "Build unit test program" OFF)
 option(RLVM_FULLSTATIC "Build executables that are linked statically" OFF)
+option(RLVM_USE_GLES2 "Target OpenGL ES 2.0" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -31,14 +32,31 @@ endif()
 enable_testing()
 
 # -------------------------------------------------------------------
-# Find OpenGL Library
+# Find GL Library
+#
+# Default: desktop OpenGL via find_package(OpenGL). The shaders compile as
+# GLSL 330 core and the SDL2 context request is unconstrained (a desktop
+# compatibility/core profile, whichever the driver picks).
+#
+# With -DRLVM_USE_GLES2=ON: link libGLESv2 directly, request a GLES 2.0
+# context from SDL, and compile GLSL ES 100 shader sources.
 # -------------------------------------------------------------------
-find_package(OpenGL REQUIRED)
-if (OpenGL_FOUND)
-  message(STATUS "OpenGL found: ${OpenGL_VERSION}")
-  include_directories(${OpenGL_INCLUDE_DIRS})
+if(RLVM_USE_GLES2)
+  pkg_check_modules(GLESV2 REQUIRED glesv2)
+  message(STATUS "GLESv2 found: ${GLESV2_VERSION}")
+  include_directories(${GLESV2_INCLUDE_DIRS})
+  link_directories(${GLESV2_LIBRARY_DIRS})
+  set(OPENGL_LIBRARIES ${GLESV2_LIBRARIES})
+  add_compile_definitions(RLVM_USE_GLES2)
 else()
-  message(FATAL_ERROR "OpenGL not found. Please install OpenGL.")
+  find_package(OpenGL REQUIRED)
+  if(OpenGL_FOUND)
+    message(STATUS "OpenGL found: ${OpenGL_VERSION}")
+    include_directories(${OpenGL_INCLUDE_DIRS})
+  else()
+    message(FATAL_ERROR "OpenGL not found. Install desktop GL dev libs, or \
+configure with -DRLVM_USE_GLES2=ON and install libgles2-mesa-dev.")
+  endif()
 endif()
 
 # -------------------------------------------------------------------

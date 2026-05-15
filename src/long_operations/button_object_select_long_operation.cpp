@@ -26,6 +26,7 @@
 
 #include "long_operations/button_object_select_long_operation.hpp"
 
+#include "core/event.hpp"
 #include "machine/rlmachine.hpp"
 #include "object/drawer/parent.hpp"
 #include "systems/base/graphics_object.hpp"
@@ -108,6 +109,13 @@ void ButtonObjectSelectLongOperation::OnEvent(std::shared_ptr<Event> event) {
           }
 
           currently_hovering_button_ = hovering_button;
+        }
+
+        if constexpr (std::same_as<T, KeyDown>) {
+          if (event.code == KeyCode::ESCAPE) {
+            machine_.GetSystem().ShowSyscomMenu(machine_);
+            return true;
+          }
         }
 
         if constexpr (std::same_as<T, MouseDown> || std::same_as<T, MouseUp>) {

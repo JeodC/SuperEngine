@@ -24,6 +24,7 @@
 #include "systems/glcanvas.hpp"
 
 #include "systems/gl_frame_buffer.hpp"
+#include "systems/gl_utils.hpp"
 #include "systems/glrenderer.hpp"
 #include "systems/gltexture.hpp"
 #include "systems/screen_canvas.hpp"
@@ -46,20 +47,7 @@ glCanvas::glCanvas(Size resolution,
 
 void glCanvas::Use() {
   glViewport(0, 0, resolution_.width(), resolution_.height());
-
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glOrtho(0.0, (GLdouble)resolution_.width(), (GLdouble)resolution_.height(),
-          0.0, 0.0, 1.0);
-
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-
-  const auto aspect_ratio_w =
-      static_cast<float>(display_size_.width()) / resolution_.width();
-  const auto aspect_ratio_h =
-      static_cast<float>(display_size_.height()) / resolution_.height();
-  glTranslatef(origin_.x() * aspect_ratio_w, origin_.y() * aspect_ratio_h, 0);
+  ShowGLErrors();
 }
 
 std::shared_ptr<glFrameBuffer> glCanvas::GetBuffer() const {

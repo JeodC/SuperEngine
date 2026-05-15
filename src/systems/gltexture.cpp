@@ -28,6 +28,10 @@
 
 #include "systems/gl_loader.hpp"
 
+#include <bit>
+#include <stdexcept>
+#include <vector>
+
 glTexture::glTexture(Size size, uint8_t* data) { Init(size, data); }
 
 void glTexture::Init(Size size, uint8_t* data) {
@@ -40,8 +44,7 @@ void glTexture::Init(Size size, uint8_t* data) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, size_.width(), size_.height(), 0,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size_.width(), size_.height(), 0,
                GL_RGBA, GL_UNSIGNED_BYTE, data);
   ShowGLErrors();
 }
@@ -57,10 +60,64 @@ void glTexture::Write(Rect region,
                       uint32_t type,
                       const void* data) {
   region = Flip_y(region);
+
+  std::vector<uint8_t> converted;
+  if (format != GL_RGBA || type != GL_UNSIGNED_BYTE) {
+    const auto* src = static_cast<const uint8_t*>(data);
+    const size_t pixels =
+        static_cast<size_t>(region.width()) * region.height();
+    converted.resize(pixels * 4);
+
+    if (format == GL_BGRA &&
+        (type == GL_UNSIGNED_BYTE ||
+         (type == GL_UNSIGNED_INT_8_8_8_8_REV &&
+          std::endian::native == std::endian::little))) {
+      // Memory layout for both:
+      //   - GL_BGRA + UNSIGNED_BYTE: B, G, R, A in memory by definition.
+      //   - GL_BGRA + UNSIGNED_INT_8_8_8_8_REV on little-endian: the same
+      //     B, G, R, A in memory (the 32-bit value, when stored in
+      //     little-endian byte order, places A in the high byte / byte 3
+      //     and B in the low byte / byte 0).
+      // Conversion to RGBA byte order is just R↔B swap.
+      for (size_t i = 0; i < pixels; ++i) {
+        converted[4 * i + 0] = src[4 * i + 2];  // R <- B
+        converted[4 * i + 1] = src[4 * i + 1];  // G
+        converted[4 * i + 2] = src[4 * i + 0];  // B <- R
+        converted[4 * i + 3] = src[4 * i + 3];  // A
+      }
+    } else if (format == GL_BGRA && type == GL_UNSIGNED_INT_8_8_8_8_REV) {
+      // Big-endian fallback: the 32-bit value stores as A, R, G, B in
+      // memory. Rotate per pixel.
+      for (size_t i = 0; i < pixels; ++i) {
+        converted[4 * i + 0] = src[4 * i + 1];  // R
+        converted[4 * i + 1] = src[4 * i + 2];  // G
+        converted[4 * i + 2] = src[4 * i + 3];  // B
+        converted[4 * i + 3] = src[4 * i + 0];  // A
+      }
+    } else if (format == GL_RGB && type == GL_UNSIGNED_BYTE) {
+      for (size_t i = 0; i < pixels; ++i) {
+        converted[4 * i + 0] = src[3 * i + 0];
+        converted[4 * i + 1] = src[3 * i + 1];
+        converted[4 * i + 2] = src[3 * i + 2];
+        converted[4 * i + 3] = 0xFF;
+      }
+    } else {
+      throw std::runtime_error(
+          "glTexture::Write: unsupported (format=" + std::to_string(format) +
+          ", type=" + std::to_string(type) + ") combo. " +
+          "Add a conversion path to gltexture.cpp.");
+    }
+
+    data = converted.data();
+    format = GL_RGBA;
+    type = GL_UNSIGNED_BYTE;
+  }
+
   glBindTexture(GL_TEXTURE_2D, id_);
   glTexSubImage2D(GL_TEXTURE_2D, 0, region.x(), region.y(), region.width(),
                   region.height(), format, type, data);
   glBindTexture(GL_TEXTURE_2D, 0);
+  ShowGLErrors();
 }
 
 void glTexture::Write(Rect region, std::vector<uint8_t> data) {
@@ -75,17 +132,17 @@ std::vector<RGBAColour> glTexture::Dump(std::optional<Rect> in_region) {
   std::vector<uint8_t> data(region.width() * region.height() * 4);
 
   GLint prev_fbo = 0;
-  glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prev_fbo);
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
 
   GLuint tmp_fbo = 0;
   glGenFramebuffers(1, &tmp_fbo);
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, tmp_fbo);
-  glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+  glBindFramebuffer(GL_FRAMEBUFFER, tmp_fbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                          GL_TEXTURE_2D, id_, 0);
   glReadPixels(region.x(), region.y(), region.width(), region.height(),
                GL_RGBA, GL_UNSIGNED_BYTE, data.data());
 
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
+  glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prev_fbo));
   glDeleteFramebuffers(1, &tmp_fbo);
 
   data = Flip_y(region.size(), data.data());

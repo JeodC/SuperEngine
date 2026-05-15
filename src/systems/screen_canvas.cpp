@@ -24,6 +24,7 @@
 
 #include "systems/screen_canvas.hpp"
 
+#include "systems/gl_utils.hpp"
 #include "systems/gltexture.hpp"
 
 #include "systems/gl_loader.hpp"
@@ -31,11 +32,12 @@
 std::shared_ptr<glTexture> ScreenCanvas::GetTexture() const {
   auto result = std::make_shared<glTexture>(display_size_);
 
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, GetID());
+  glBindFramebuffer(GL_FRAMEBUFFER, GetID());
   glBindTexture(GL_TEXTURE_2D, result->GetID());
   glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, display_size_.width(),
                       display_size_.height());
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  ShowGLErrors();
 
   return result;
 }

@@ -23,50 +23,68 @@
 #include "systems/gl_loader.hpp"
 
 #include <cstring>
+#include <format>
 #include <stdexcept>
 
 std::string GetGLErrors(void) {
   GLenum error;
   std::string msg;
 
-  if ((error = glGetError()) != GL_NO_ERROR) {
+  // Drain the error queue
+  while ((error = glGetError()) != GL_NO_ERROR) {
+    if (!msg.empty()) msg += "; ";
+    const char* name = nullptr;
     switch (error) {
-      case GL_NO_ERROR:
-        msg += "No error has been recorded.";
       case GL_INVALID_ENUM:
-        msg += "An unacceptable value is specified for an enumerated argument.";
+        name = "GL_INVALID_ENUM (unacceptable enum value)";
+        break;
       case GL_INVALID_VALUE:
-        msg += "A numeric argument is out of range.";
+        name = "GL_INVALID_VALUE (numeric arg out of range)";
+        break;
       case GL_INVALID_OPERATION:
-        msg += "The specified operation is not allowed in the current state.";
-      case GL_STACK_OVERFLOW:
-        msg += "This command would cause a stack overflow.";
-      case GL_STACK_UNDERFLOW:
-        msg += "This command would cause a stack underflow.";
+        name = "GL_INVALID_OPERATION (op not allowed in current state)";
+        break;
       case GL_OUT_OF_MEMORY:
-        msg += "There is not enough memory left to execute the command.";
+        name = "GL_OUT_OF_MEMORY";
+        break;
       case GL_INVALID_FRAMEBUFFER_OPERATION:
-        msg += "The framebuffer object is not complete.";
+        name = "GL_INVALID_FRAMEBUFFER_OPERATION (FBO incomplete)";
+        break;
+#ifdef GL_STACK_OVERFLOW
+      case GL_STACK_OVERFLOW:
+        name = "GL_STACK_OVERFLOW";
+        break;
+#endif
+#ifdef GL_STACK_UNDERFLOW
+      case GL_STACK_UNDERFLOW:
+        name = "GL_STACK_UNDERFLOW";
+        break;
+#endif
       default:
-        msg += "An unknown OpenGL error has occurred.";
+        name = "unknown";
+        break;
     }
+    msg += std::format("0x{:04x} {}", static_cast<unsigned>(error), name);
   }
   return msg;
 }
 
-void ShowGLErrors() {
+void ShowGLErrors(std::source_location loc) {
   auto error = GetGLErrors();
-  if (!error.empty())
-    throw std::runtime_error("GL error: " + error);
+  if (!error.empty()) {
+    // Strip any directory prefix from the source path for readability.
+    std::string_view file = loc.file_name();
+    if (auto pos = file.find_last_of("/\\"); pos != std::string_view::npos)
+      file.remove_prefix(pos + 1);
+    throw std::runtime_error(std::format("GL error at {}:{} in {}: {}", file,
+                                         loc.line(), loc.function_name(),
+                                         error));
+  }
 }
 
 // -----------------------------------------------------------------------
 
 bool IsNPOTSafe() {
-  // Check GL_ARB_texture_non_power_of_two via runtime extension string
-  // instead of GLEW's compile-time macro. Cached after first call.
-  // NPOT is core in GL 2.0+ and GLES 3.0+, so this is true on essentially
-  // every target we support — but we still verify defensively.
   static bool initialized = false;
   static bool is_safe = false;
   if (!initialized) {
@@ -75,7 +93,8 @@ bool IsNPOTSafe() {
     if (extensions_str) {
       const char* extensions = reinterpret_cast<const char*>(extensions_str);
       is_safe =
-          std::strstr(extensions, "GL_ARB_texture_non_power_of_two") != nullptr;
+          std::strstr(extensions, "GL_ARB_texture_non_power_of_two") != nullptr
+          || std::strstr(extensions, "GL_OES_texture_npot") != nullptr;
     }
   }
   return is_safe;
