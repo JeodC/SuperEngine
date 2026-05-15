@@ -252,8 +252,13 @@ void SDLGraphicsBackend::SetWindowTitle(const std::string& title_utf8) {
   current_window_title_ = title_utf8;
 }
 
-void SDLGraphicsBackend::ShowSystemCursor(bool show) {
-  SDL_ShowCursor(show ? SDL_ENABLE : SDL_DISABLE);
+void SDLGraphicsBackend::ShowSystemCursor(bool /*show*/) {
+  // The engine renders its own software cursor (see GetCurrentCursor /
+  // draw_cursor in graphics_system.cpp). Showing the OS cursor on top
+  // produces a visible duplicate when the game has a custom cursor. 
+  // Hide unconditionally — the upstream ShouldUseCustomCursor() toggle 
+  //still controls whether the SOFTWARE cursor is drawn.
+  SDL_ShowCursor(SDL_DISABLE);
 }
 
 void SDLGraphicsBackend::RenderFrame(const RenderFrameConfig& config,
