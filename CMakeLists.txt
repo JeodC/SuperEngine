@@ -136,6 +136,42 @@ else()
 endif()
 
 # -------------------------------------------------------------------
+# pl_mpeg — single-header MPEG-1 video + MP2 audio decoder for movPlay /
+# movPlayEx (the .mpg files RealLive games ship in gamedata/mov/). Fetched
+# via FetchContent at configure time so the source tree stays clean and we
+# don't need to vendor 140 KB of upstream code as a committed file.
+# -------------------------------------------------------------------
+include(FetchContent)
+FetchContent_Declare(
+  pl_mpeg
+  GIT_REPOSITORY https://github.com/phoboslab/pl_mpeg.git
+  # Pinned to the last commit before phoboslab/pl_mpeg#55 (seek/tell
+  # callback support) and #56 (PLM_NO_STDIO). Those refactors moved the
+  # plm_buffer_seek_callback / plm_buffer_tell_callback typedefs out of
+  # the public header section, so any consumer compiling with modern GCC
+  # (which errors on implicit-int and unknown-type-name) now fails to
+  # build pl_mpeg.h. 6d4733ae is "Reset has_ended flag when rewinding",
+  # 2025-01-24, the latest commit that compiles cleanly under GCC 13+
+  # without -Wno-implicit-function-declaration noise.
+  GIT_TAG        6d4733aed57e29d12344b926ca478c9d770badfb
+)
+FetchContent_MakeAvailable(pl_mpeg)
+
+# pl_mpeg.h is "everything inside one header" — to get the implementation
+# compiled, exactly one TU must define PL_MPEG_IMPLEMENTATION before the
+# include. Generate that shim TU here so we don't need to commit a stub
+# file to vendor/.
+set(_pl_mpeg_impl "${CMAKE_BINARY_DIR}/pl_mpeg_impl.c")
+file(WRITE "${_pl_mpeg_impl}"
+  "#define PL_MPEG_IMPLEMENTATION\n"
+  "#include \"pl_mpeg.h\"\n"
+)
+add_library(pl_mpeg STATIC "${_pl_mpeg_impl}")
+target_include_directories(pl_mpeg PUBLIC "${pl_mpeg_SOURCE_DIR}")
+# pl_mpeg uses libm
+target_link_libraries(pl_mpeg PUBLIC m)
+
+# -------------------------------------------------------------------
 # Add Subdirectories to Build
 # -------------------------------------------------------------------
 include_directories(vendor)

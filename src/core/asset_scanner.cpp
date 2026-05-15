@@ -51,8 +51,8 @@ AssetScanner AssetScanner::BuildFromGameexe(Gameexe& gexe) {
   }
 
   static const std::set<std::string> rlvm_file_types{
-      "g00", "pdt", "anm", "gan", "hik", "wav",
-      "ogg", "nwa", "mp3", "ovk", "koe", "nwk"};
+      "g00", "pdt", "anm", "gan",  "hik", "wav", "ogg",
+      "nwa", "mp3", "ovk", "koe",  "nwk", "mpg", "mpeg"};
 
   fs::path gamepath;
   if (!gexe("__GAMEPATH").Exists())

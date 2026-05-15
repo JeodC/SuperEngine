@@ -19,6 +19,7 @@ set(RLVM_REQUIRED_LIBRARIES
     pygame
     samplerate
     utf8cpp
+    pl_mpeg
 )
 
 # -------------------------------------------------------------------

@@ -58,6 +58,11 @@ class SDLSoundImpl : public ISoundSystem {
   uint16_t ToSDLSoundFormat(AV_SAMPLE_FMT fmt) const;
   AV_SAMPLE_FMT FromSDLSoundFormat(uint16_t fmt) const;
 
+  // Re-installs the BGM music hook on the SDL2_mixer device. Movie
+  // playback temporarily replaces the hook via Mix_HookMusic to stream
+  // its own audio; calling this after the movie ends restores BGM.
+  static void RestoreBgmHook();
+
  private:
   const char* GetError() const;
 

@@ -103,6 +103,10 @@ void SDLSoundImpl::CloseAudio() const {
   Mix_CloseAudio();
 }
 
+void SDLSoundImpl::RestoreBgmHook() {
+  Mix_HookMusic(&SDLSoundImpl::OnMusic, NULL);
+}
+
 inline static void CheckChannel(int ch_id,
                                 size_t tot_channel,
                                 std::string function_name = "sdl implementor") {
@@ -275,15 +279,20 @@ void SDLSoundImpl::OnChannelFinished(int channel) {
 void SDLSoundImpl::OnMusic(void*, uint8_t* stream, int len) {
   std::memset(stream, 0, len);
 
-  if (!bgm_player_ || !bgm_enabled_)
+  // Snapshot bgm_player_ into a local shared_ptr. PlayBgm reassigns the
+  // member under SDL_LockAudio, but we want this callback's AudioPlayer
+  // (and the mmap it owns) to stay alive for the duration of LoadPCM
+  // even if our refcount-bumped local outlives the static member.
+  player_t local_player = bgm_player_;
+  if (!local_player || !bgm_enabled_)
     return;
-  if (bgm_player_->GetStatus() == AudioPlayer::STATUS::TERMINATED) {
+  if (local_player->GetStatus() == AudioPlayer::STATUS::TERMINATED) {
     bgm_player_ = nullptr;
     return;
   }
 
   auto pcm_count = len / Bytecount(spec_.sample_format);
-  auto audio_data = bgm_player_->LoadPCM(pcm_count).GetAs(spec_.sample_format);
+  auto audio_data = local_player->LoadPCM(pcm_count).GetAs(spec_.sample_format);
   std::visit([&](auto&& buf) { std::memmove(stream, buf.data(), len); },
              std::move(audio_data));
 }
