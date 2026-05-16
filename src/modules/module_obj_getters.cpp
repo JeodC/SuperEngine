@@ -131,7 +131,7 @@ void addFunctions(RLModule& m) {
   m.AddOpcode(1001, 0, "objGetPosX",
               new Obj_GetInt(CreateGetter<ObjectProperty::PositionX>()));
   m.AddOpcode(1002, 0, "objGetPosY",
-              new Obj_GetInt(CreateGetter<ObjectProperty::PositionX>()));
+              new Obj_GetInt(CreateGetter<ObjectProperty::PositionY>()));
   m.AddOpcode(1003, 0, "objGetAlpha",
               new Obj_GetInt(CreateGetter<ObjectProperty::AlphaSource>()));
   m.AddOpcode(1004, 0, "objGetShow",
