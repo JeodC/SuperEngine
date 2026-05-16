@@ -392,6 +392,15 @@ class GraphicsSystem : public EventListener {
   // relativly cheap operation.)
   void TakeSavepointSnapshot();
 
+  // Snapshot/restore the current FG+BG object layers across a syscom-menu
+  // open/close. Bound to module 0:4 opcodes 100/101 (which scene 2000:7 in
+  // Clannad Side Stories wraps around its menu Farcall — without this, the
+  // button objects the menu script lays out are never removed when the
+  // menu closes). Distinct from the savepoint snapshot above, which is
+  // tied to game-save state.
+  void TakeMenuSnapshot();
+  void RestoreMenuSnapshot();
+
   std::shared_ptr<SDLSurface> GetHaikei();
 
   void AllocateDC(int dc, Size screen_size);

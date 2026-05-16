@@ -126,10 +126,33 @@ struct Ret : public RLOpcode<> {
   void operator()(RLMachine& machine) { Return(machine); }
 };
 
+// op<0:4:100>(N) — observed in Clannad Side Stories scene 2000:7 wrapping
+// the syscom-menu Farcall: snapshots the current FG+BG object layers.
+// The N argument's meaning is unknown from disassembly alone (SS calls it
+// with 0); we ignore it and snapshot everything.
+struct MenuSnapshotPush : public RLOpcode<IntConstant_T> {
+  void operator()(RLMachine& machine, int /*flags*/) {
+    machine.GetSystem().graphics().TakeMenuSnapshot();
+  }
+};
+
+// op<0:4:101>(A, B) — paired with op<0:4:100>: restores the FG+BG layers
+// to the state captured at the most recent op<0:4:100>. SS calls it with
+// (1, 8); both args are ignored. Without this, the menu's button objects
+// stay drawn after the user dismisses the menu.
+struct MenuSnapshotPop : public RLOpcode<IntConstant_T, IntConstant_T> {
+  void operator()(RLMachine& machine, int /*a*/, int /*b*/) {
+    machine.GetSystem().graphics().RestoreMenuSnapshot();
+  }
+};
+
 }  // namespace
 
 EventLoopModule::EventLoopModule() : RLModule("EventLoop", 0, 4) {
   AddOpcode(48, 0, "rlm_pause", new rlm_pause);
+
+  AddOpcode(100, 0, "MenuSnapshotPush", new MenuSnapshotPush);
+  AddOpcode(101, 0, "MenuSnapshotPop", new MenuSnapshotPop);
 
   AddUnsupportedOpcode(120, 0, "SetInterrupt");
   AddUnsupportedOpcode(121, 0, "ClearInterrupt");

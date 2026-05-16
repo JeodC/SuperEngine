@@ -193,6 +193,18 @@ struct GraphicsSystem::GraphicsObjectImpl {
   // Background objects (at the time of the last save)
   LazyArray<GraphicsObject> saved_background_objects;
 
+  // Menu open/close snapshot pair, populated/consumed by
+  // GraphicsSystem::TakeMenuSnapshot / RestoreMenuSnapshot. Distinct from
+  // saved_*_objects above, which are tied to game-save state — these track
+  // the FG/BG layers across a CANCELCALL menu Farcall so we can restore the
+  // layer state when the menu closes (the menu script adds button objects
+  // and a few decorations and never explicitly removes them; the original
+  // Reallive engine relies on op<0:4:100>/op<0:4:101> wrapping the menu
+  // call to do that cleanup).
+  LazyArray<GraphicsObject> menu_snapshot_foreground_objects;
+  LazyArray<GraphicsObject> menu_snapshot_background_objects;
+  bool menu_snapshot_valid = false;
+
   // List of commands in RealLive bytecode to rebuild the graphics stack at the
   // current moment.
   std::deque<std::string> graphics_stack;
@@ -207,7 +219,9 @@ GraphicsSystem::GraphicsObjectImpl::GraphicsObjectImpl(int size)
     : foreground_objects(size),
       background_objects(size),
       saved_foreground_objects(size),
-      saved_background_objects(size) {}
+      saved_background_objects(size),
+      menu_snapshot_foreground_objects(size),
+      menu_snapshot_background_objects(size) {}
 
 // -----------------------------------------------------------------------
 // GraphicsSystem
@@ -982,6 +996,46 @@ void GraphicsSystem::TakeSavepointSnapshot() {
 
   graphics_object_impl_->saved_graphics_stack =
       graphics_object_impl_->graphics_stack;
+}
+
+// -----------------------------------------------------------------------
+
+void GraphicsSystem::TakeMenuSnapshot() {
+  auto& fg = graphics_object_impl_->foreground_objects;
+  auto& bg = graphics_object_impl_->background_objects;
+  auto& snap_fg = graphics_object_impl_->menu_snapshot_foreground_objects;
+  auto& snap_bg = graphics_object_impl_->menu_snapshot_background_objects;
+
+  snap_fg.Clear();
+  for (auto it = fg.begin(), end = fg.end(); it != end; ++it)
+    snap_fg[it.pos()] = it->Clone();
+
+  snap_bg.Clear();
+  for (auto it = bg.begin(), end = bg.end(); it != end; ++it)
+    snap_bg[it.pos()] = it->Clone();
+
+  graphics_object_impl_->menu_snapshot_valid = true;
+}
+
+void GraphicsSystem::RestoreMenuSnapshot() {
+  if (!graphics_object_impl_->menu_snapshot_valid)
+    return;
+
+  auto& fg = graphics_object_impl_->foreground_objects;
+  auto& bg = graphics_object_impl_->background_objects;
+  auto& snap_fg = graphics_object_impl_->menu_snapshot_foreground_objects;
+  auto& snap_bg = graphics_object_impl_->menu_snapshot_background_objects;
+
+  fg.Clear();
+  for (auto it = snap_fg.begin(), end = snap_fg.end(); it != end; ++it)
+    fg[it.pos()] = it->Clone();
+
+  bg.Clear();
+  for (auto it = snap_bg.begin(), end = snap_bg.end(); it != end; ++it)
+    bg[it.pos()] = it->Clone();
+
+  graphics_object_impl_->menu_snapshot_valid = false;
+  ForceRefresh();
 }
 
 // -----------------------------------------------------------------------
